@@ -1,41 +1,41 @@
-// Top-level module for FPGA SHA-1 hash computation with dynamic nonce iteration
-// Implements proof-of-work mining: receives message + expected hash via UART,
-// iterates nonce from 0 to DIFFICULTY, computing SHA-1(message||nonce) until match found
+// Módulo de topo: computação SHA-1 em FPGA com iteração dinâmica de nonce
+// Implementa mineração proof-of-work: recebe mensagem + hash esperado via UART,
+// itera nonce de 0 até DIFFICULTY, calculando SHA-1(mensagem||nonce) até encontrar correspondência
 `default_nettype wire
 
 module top(
-    input wire clk,            // System clock (27 MHz)
-	input wire rst,            // Active-high reset
-    input wire uart_rx,        // UART receive pin
-    output wire uart_tx,       // UART transmit pin
-    output wire led,           // LED: SHA-1 match status (active-low)
-    output wire led_sha1_work, // LED: SHA-1 processing active (active-low)
-    output wire led_sha1_finish, // LED: SHA-1 computation finished (active-low)
-    output wire led_uart_work, // LED: UART transmit active (active-low)
-    output wire led_uart_finish  // LED: UART transmit finished (active-low)
+    input wire clk,            // Relógio do sistema (27 MHz)
+	input wire rst,            // Reset ativo em nível alto
+    input wire uart_rx,        // Pino de recepção UART
+    output wire uart_tx,       // Pino de transmissão UART
+    output wire led,           // LED: status de correspondência SHA-1 (ativo-baixo)
+    output wire led_sha1_work, // LED: processamento SHA-1 ativo (ativo-baixo)
+    output wire led_sha1_finish, // LED: computação SHA-1 finalizada (ativo-baixo)
+    output wire led_uart_work, // LED: transmissão UART ativa (ativo-baixo)
+    output wire led_uart_finish  // LED: transmissão UART finalizada (ativo-baixo)
 );
 
-parameter CLK_FRE  = 27;    // Clock frequency in MHz
-parameter UART_FRE = 115200; // UART baud rate
+parameter CLK_FRE  = 27;    // Frequência do relógio em MHz
+parameter UART_FRE = 115200; // Taxa de bauds UART
 
-parameter DIFFICULTY = 9000000; // Maximum nonce value for proof-of-work (9,000,000 iterations)
+parameter DIFFICULTY = 9000000; // Valor máximo de nonce para proof-of-work (9.000.000 iterações)
 
-// Input message (dynamic): 40 bytes received via UART, stored in buffer[0..39]
-// Expected SHA-1 hash: 40 ASCII hex characters received via UART, stored in buffer[40..79]
-// Hash represents 20 binary bytes (160 bits) for SHA-1 comparison
-reg [159:0] SHA1_EXPECTED;  // Expected SHA-1 hash (160 bits = 20 bytes, decoded from buffer[40..79])
+// Mensagem de entrada (dinâmica): 40 bytes recebidos via UART, armazenados em buffer[0..39]
+// Hash SHA-1 esperado: 40 caracteres ASCII hexadecimais recebidos via UART, armazenados em buffer[40..79]
+// Hash representa 20 bytes binários (160 bits) para comparação SHA-1
+reg [159:0] SHA1_EXPECTED;  // Hash SHA-1 esperado (160 bits = 20 bytes, decodificado de buffer[40..79])
 
-// Nonce variable: incremented from 0 to DIFFICULTY (2,000,000) during computation
-reg [31:0] nonce;  // 32-bit nonce (sufficient for values up to 9,000,000 )
+// Variável nonce: incrementada de 0 até DIFFICULTY (9.000.000) durante computação
+reg [31:0] nonce;  // Nonce de 32 bits (suficiente para valores até 9.000.000)
 
-// Nonce ASCII conversion: variable length (without leading zeros)
-// Maximum 7 bytes for values up to 2,000,000
-// Example: nonce=1     -> nonce_ascii="1"      (1 byte)
+// Conversão ASCII do nonce: comprimento variável (sem zeros à esquerda)
+// Máximo 7 bytes para valores até 9.000.000
+// Exemplo: nonce=1     -> nonce_ascii="1"      (1 byte)
 //          nonce=12345 -> nonce_ascii="12345"  (5 bytes)
-reg [55:0] nonce_ascii;     // ASCII representation of nonce (56 bits = 7 bytes maximum)
-reg [2:0] nonce_ascii_len;  // Length in bytes (1-7)
+reg [55:0] nonce_ascii;     // Representação ASCII do nonce (56 bits = 7 bytes máximo)
+reg [2:0] nonce_ascii_len;  // Comprimento em bytes (1-7)
 
-// Digit extraction combinational logic: decimal digits derived from nonce value
+// Lógica combinacional de extração de dígitos: dígitos decimais derivados do valor do nonce
 wire [31:0] digit7 = (nonce / 32'd1000000) % 32'd10;  // 10^6
 wire [31:0] digit6 = (nonce / 32'd100000) % 32'd10;   // 10^5
 wire [31:0] digit5 = (nonce / 32'd10000) % 32'd10;    // 10^4
@@ -44,50 +44,50 @@ wire [31:0] digit3 = (nonce / 32'd100) % 32'd10;      // 10^2
 wire [31:0] digit2 = (nonce / 32'd10) % 32'd10;       // 10^1
 wire [31:0] digit1 = nonce % 32'd10;                  // 10^0
 
-// Message block: 512-bit input block with padding (RFC 3174 SHA-1 standard)
-// Dynamic structure:
-//   Bytes 0-39:  Message (40 bytes) from UART buffer
-//   Bytes 40+:   Nonce ASCII (1-7 bytes, variable length, no leading zeros)
-//   Byte 47+:    0x80 (padding bit marker) + zero bytes + message_length_in_bits (64-bit big-endian)
+// Bloco de mensagem: bloco de entrada de 512 bits com preenchimento (padrão RFC 3174 SHA-1)
+// Estrutura dinâmica:
+//   Bytes 0-39:  Mensagem (40 bytes) do buffer UART
+//   Bytes 40+:   Nonce ASCII (1-7 bytes, comprimento variável, sem zeros à esquerda)
+//   Byte 47+:    0x80 (marcador de preenchimento) + bytes zero + comprimento_mensagem_bits (64-bit big-endian)
 
-reg [511:0] MESSAGE_BLOCK_1;  // 512-bit SHA-1 message block
+reg [511:0] MESSAGE_BLOCK_1;  // Bloco de mensagem SHA-1 de 512 bits
 
-// Combinational logic: constructs dynamic MESSAGE_BLOCK_1 with variable-length nonce
+// Lógica combinacional: constrói dinamicamente MESSAGE_BLOCK_1 com nonce de comprimento variável
 always @(*) begin
-    // Determine ASCII nonce length and construct nonce_ascii register
+    // Determina comprimento ASCII do nonce e constrói registro nonce_ascii
     if (nonce == 0) begin
         nonce_ascii_len = 3'd1;
         nonce_ascii = {48'd0, 8'h30};  // "0"
     end else if (nonce < 10) begin
         nonce_ascii_len = 3'd1;
-        nonce_ascii = {48'd0, 8'h30 + digit1[7:0]};  // "1" a "9"
+        nonce_ascii = {48'd0, 8'h30 + digit1[7:0]};  // "1" até "9"
     end else if (nonce < 100) begin
         nonce_ascii_len = 3'd2;
-        nonce_ascii = {40'd0, 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};  // "10" a "99"
+        nonce_ascii = {40'd0, 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};  // "10" até "99"
     end else if (nonce < 1000) begin
         nonce_ascii_len = 3'd3;
-        nonce_ascii = {32'd0, 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};  // "100" a "999"
+        nonce_ascii = {32'd0, 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};  // "100" até "999"
     end else if (nonce < 10000) begin
         nonce_ascii_len = 3'd4;
-        nonce_ascii = {24'd0, 8'h30 + digit4[7:0], 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};  // "1000" a "9999"
+        nonce_ascii = {24'd0, 8'h30 + digit4[7:0], 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};  // "1000" até "9999"
     end else if (nonce < 100000) begin
         nonce_ascii_len = 3'd5;
-        nonce_ascii = {16'd0, 8'h30 + digit5[7:0], 8'h30 + digit4[7:0], 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};   // "10000" a "99999"
+        nonce_ascii = {16'd0, 8'h30 + digit5[7:0], 8'h30 + digit4[7:0], 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};   // "10000" até "99999"
     end else if (nonce < 1000000) begin
         nonce_ascii_len = 3'd6;
-        nonce_ascii = {8'd0, 8'h30 + digit6[7:0], 8'h30 + digit5[7:0], 8'h30 + digit4[7:0], 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};    // "100000" a "999999"
+        nonce_ascii = {8'd0, 8'h30 + digit6[7:0], 8'h30 + digit5[7:0], 8'h30 + digit4[7:0], 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};    // "100000" até "999999"
     end else begin
         nonce_ascii_len = 3'd7;
-        nonce_ascii = {8'h30 + digit7[7:0], 8'h30 + digit6[7:0], 8'h30 + digit5[7:0], 8'h30 + digit4[7:0], 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};   // "1000000" a "9999999"
+        nonce_ascii = {8'h30 + digit7[7:0], 8'h30 + digit6[7:0], 8'h30 + digit5[7:0], 8'h30 + digit4[7:0], 8'h30 + digit3[7:0], 8'h30 + digit2[7:0], 8'h30 + digit1[7:0]};   // "1000000" até "9999999"
     end
     
     // Construir MESSAGE_BLOCK_1
-    // Total data: 40 (message) + nonce_ascii_len bytes
-    // Padding calculated to maintain 512-bit block size
+    // Total de dados: 40 (mensagem) + nonce_ascii_len bytes
+    // Preenchimento calculado para manter tamanho de bloco de 512 bits
     case (nonce_ascii_len)
-        3'd1: begin
-            // 40 + 1 = 41 bytes de dados
-            // Message length: 41 * 8 = 328 bits = 0x0148
+         3'd1: begin
+             // 40 + 1 = 41 bytes de dados
+             // Comprimento da mensagem: 41 * 8 = 328 bits = 0x0148
             MESSAGE_BLOCK_1 = {
                 buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
                 buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
@@ -102,9 +102,9 @@ always @(*) begin
                 8'h01, 8'h48
             };
         end
-        3'd2: begin
-            // 40 + 2 = 42 bytes de dados
-            // Message length: 42 * 8 = 336 bits = 0x0150
+         3'd2: begin
+             // 40 + 2 = 42 bytes de dados
+             // Comprimento da mensagem: 42 * 8 = 336 bits = 0x0150
             MESSAGE_BLOCK_1 = {
                 buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
                 buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
@@ -119,9 +119,9 @@ always @(*) begin
                 8'h01, 8'h50
             };
         end
-        3'd3: begin
-            // 40 + 3 = 43 bytes de dados
-            // Message length: 43 * 8 = 344 bits = 0x0158
+         3'd3: begin
+             // 40 + 3 = 43 bytes de dados
+             // Comprimento da mensagem: 43 * 8 = 344 bits = 0x0158
             MESSAGE_BLOCK_1 = {
                 buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
                 buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
@@ -136,9 +136,9 @@ always @(*) begin
                 8'h01, 8'h58
             };
         end
-        3'd4: begin
-            // 40 + 4 = 44 bytes de dados
-            // Message length: 44 * 8 = 352 bits = 0x0160
+         3'd4: begin
+             // 40 + 4 = 44 bytes de dados
+             // Comprimento da mensagem: 44 * 8 = 352 bits = 0x0160
             MESSAGE_BLOCK_1 = {
                 buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
                 buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
@@ -153,9 +153,9 @@ always @(*) begin
                 8'h01, 8'h60
             };
         end
-        3'd5: begin
-            // 40 + 5 = 45 bytes de dados
-            // Message length: 45 * 8 = 360 bits = 0x0168
+         3'd5: begin
+             // 40 + 5 = 45 bytes de dados
+             // Comprimento da mensagem: 45 * 8 = 360 bits = 0x0168
             MESSAGE_BLOCK_1 = {
                 buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
                 buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
@@ -169,9 +169,9 @@ always @(*) begin
                 8'h01, 8'h68
             };
         end
-        3'd6: begin
-            // 40 + 6 = 46 bytes de dados
-            // Message length: 46 * 8 = 368 bits = 0x0170
+         3'd6: begin
+             // 40 + 6 = 46 bytes de dados
+             // Comprimento da mensagem: 46 * 8 = 368 bits = 0x0170
             MESSAGE_BLOCK_1 = {
                 buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
                 buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
@@ -185,9 +185,9 @@ always @(*) begin
                 8'h01, 8'h70
             };
         end
-        default: begin  // 3'd7
-            // 40 + 7 = 47 bytes de dados
-            // Message length: 47 * 8 = 376 bits = 0x0178
+         default: begin  // 3'd7
+             // 40 + 7 = 47 bytes de dados
+             // Comprimento da mensagem: 47 * 8 = 376 bits = 0x0178
             MESSAGE_BLOCK_1 = {
                 buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
                 buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
@@ -203,11 +203,11 @@ always @(*) begin
         end
     endcase
     
-    // SHA1_EXPECTED: Decode 40 ASCII hex characters from buffer[40..79] into 160-bit binary hash
-    // Conversion: each pair of ASCII hex chars [2n, 2n+1] becomes one binary byte
-    // Example: ASCII '48' -> 0x48, 'a3' -> 0xa3, etc. (supports both uppercase and lowercase)
+    // SHA1_EXPECTED: Decodifica 40 caracteres ASCII hexadecimais de buffer[40..79] em hash binário de 160 bits
+    // Conversão: cada par de caracteres ASCII hex [2n, 2n+1] torna-se um byte binário
+    // Exemplo: ASCII '48' -> 0x48, 'a3' -> 0xa3, etc. (suporta maiúsculas e minúsculas)
     SHA1_EXPECTED = {
-        // Bytes 0-19: Decode hex pairs from buffer indices 40-79
+        // Bytes 0-19: Decodifica pares hex de índices de buffer 40-79
         (buffer[40] >= 8'h61 ? buffer[40] - 8'h57 : buffer[40] - 8'h30) << 4 | 
         (buffer[41] >= 8'h61 ? buffer[41] - 8'h57 : buffer[41] - 8'h30),
         (buffer[42] >= 8'h61 ? buffer[42] - 8'h57 : buffer[42] - 8'h30) << 4 | 
@@ -252,65 +252,65 @@ always @(*) begin
     
 end
 
-// MESSAGE_BLOCK for SHA-1 core: dynamically constructed message block (512 bits total)
-// Structure: message (40 bytes) + nonce (1-7 bytes) + padding + message_length
+// MESSAGE_BLOCK para núcleo SHA-1: bloco de mensagem construído dinamicamente (512 bits total)
+// Estrutura: mensagem (40 bytes) + nonce (1-7 bytes) + preenchimento + comprimento_mensagem
 wire [511:0] MESSAGE_BLOCK = MESSAGE_BLOCK_1;
 
-// SHA-1 computation signals
-reg [27:0] clock_counter;     // State machine timing counter: counts to 27 (≈1 second at 27MHz) for SHA-1 computation wait and LED blink
+// Sinais de computação SHA-1
+reg [27:0] clock_counter;     // Contador de temporização da máquina de estados: conta até 27 (≈1 segundo a 27MHz) para espera de computação SHA-1 e pisca do LED
 
-reg [159:0] sha1_digest;     // Computed SHA-1 digest result
-reg sha1_digest_valid;        // Flag: SHA-1 computation complete
+reg [159:0] sha1_digest;     // Resultado do resumo SHA-1 computado
+reg sha1_digest_valid;        // Bandeira: computação SHA-1 completa
 
-wire sha1_core_ready;         // SHA-1 core ready signal (can accept new computation)
-wire [159:0] sha1_core_digest;  // SHA-1 core output digest (160 bits)
-wire sha1_core_digest_valid;   // SHA-1 core completion flag
+wire sha1_core_ready;         // Sinal de núcleo SHA-1 pronto (pode aceitar nova computação)
+wire [159:0] sha1_core_digest;  // Resumo de saída do núcleo SHA-1 (160 bits)
+wire sha1_core_digest_valid;   // Bandeira de conclusão do núcleo SHA-1
 
-reg sha1_init;             // Strobed signal: triggers SHA-1 core initialization
-reg sha1_next;            // Strobed signal: triggers SHA-1 core to process next block
-wire sha1_start;            // Start signal: asserted when UART buffer is full (BUFFER_FULL state)
-wire uart_tx_done_signal;   // Completion signal: asserted when UART transmission finishes (UART_TX_DONE state)
+reg sha1_init;             // Sinal pulsado: dispara inicialização do núcleo SHA-1
+reg sha1_next;            // Sinal pulsado: dispara processamento do próximo bloco do núcleo SHA-1
+wire sha1_start;            // Sinal de início: ativado quando buffer UART está cheio (estado BUFFER_FULL)
+wire uart_tx_done_signal;   // Sinal de conclusão: ativado quando transmissão UART termina (estado UART_TX_DONE)
 
-reg led_output;           // LED output: SHA-1 match status
-reg led_sha1_work_output;     // LED output: SHA-1 processing active
-reg led_sha1_finish_output;   // LED output: SHA-1 computation finished
-reg led_uart_work_output;     // LED output: UART transmit in progress
-reg led_uart_finish_output;   // LED output: UART transmit finished
+reg led_output;           // Saída LED: status de correspondência SHA-1
+reg led_sha1_work_output;     // Saída LED: processamento SHA-1 ativo
+reg led_sha1_finish_output;   // Saída LED: computação SHA-1 finalizada
+reg led_uart_work_output;     // Saída LED: transmissão UART em andamento
+reg led_uart_finish_output;   // Saída LED: transmissão UART finalizada
 
-reg [27:0] blink_counter;    // Blink counter for LED
+reg [27:0] blink_counter;    // Contador de pisca para LED
 
-// SHA-1 state machine: implements proof-of-work with nonce iteration
-// States: RESET → IDLE → INIT_SHA1 → RUNNING → DONE_WAIT → RESULT
-// In RESULT: if hash matches, transmit nonce; otherwise increment and retry
+// Máquina de estados SHA-1: implementa proof-of-work com iteração de nonce
+// Estados: RESET → IDLE → INIT_SHA1 → RUNNING → DONE_WAIT → RESULT
+// Em RESULT: se hash corresponde, transmite nonce; caso contrário, incrementa e tenta novamente
 reg [2:0] state;
-localparam STATE_RESET      = 3'b000;  // Initialize: reset all counters
-localparam STATE_IDLE       = 3'b001;  // Wait: SHA-1 core ready AND UART buffer full
-localparam STATE_INIT_SHA1  = 3'b010;  // Initialize SHA-1 core with MESSAGE_BLOCK
-localparam STATE_RUNNING    = 3'b011;  // Delay: wait for SHA-1 core to complete (~1 second)
-localparam STATE_DONE_WAIT  = 3'b100;  // Poll: wait for SHA-1 digest_valid flag
-localparam STATE_RESULT     = 3'b101;  // Check: if match found, signal UART TX; otherwise increment nonce and retry
+localparam STATE_RESET      = 3'b000;  // Inicializar: reinicia todos os contadores
+localparam STATE_IDLE       = 3'b001;  // Aguardar: núcleo SHA-1 pronto E buffer UART cheio
+localparam STATE_INIT_SHA1  = 3'b010;  // Inicializar núcleo SHA-1 com MESSAGE_BLOCK
+localparam STATE_RUNNING    = 3'b011;  // Atraso: aguardar conclusão do núcleo SHA-1 (~1 segundo)
+localparam STATE_DONE_WAIT  = 3'b100;  // Pesquisar: aguardar bandeira digest_valid SHA-1
+localparam STATE_RESULT     = 3'b101;  // Verificar: se correspondência encontrada, sinaliza TX UART; caso contrário incrementa nonce e tenta novamente
 
-// UART RX signals
-wire [7:0] rx_data;        // Received data byte
-wire rx_data_valid;       // RX data valid flag
-reg rx_data_ready = 1'b1; // RX ready flag
+// Sinais de recepção UART
+wire [7:0] rx_data;        // Byte de dados recebido
+wire rx_data_valid;       // Bandeira de dados válidos RX
+reg rx_data_ready = 1'b1; // Bandeira RX pronto
 
-// UART TX signals
-reg [7:0] tx_data;       // Transmit data byte
-reg tx_data_valid;      // TX data valid flag
-wire tx_data_ready;    // TX ready flag
+// Sinais de transmissão UART
+reg [7:0] tx_data;       // Byte de dados a transmitir
+reg tx_data_valid;      // Bandeira de dados válidos TX
+wire tx_data_ready;    // Bandeira TX pronto
 
-wire rst_n = !rst;  // Convert reset to active-low convention for IP cores
+wire rst_n = !rst;  // Converte reset para convenção ativo-baixo para núcleos IP
 
-// LED outputs: inverted because LEDs are active-low
-assign led = ~led_output;                     // LED: SHA-1 computed hash matches expected value
-assign led_sha1_work = ~led_sha1_work_output;   // LED: SHA-1 computation in progress (1-second blink)
-assign led_sha1_finish = ~led_sha1_finish_output;  // LED: SHA-1 computation finished (0.5-second blink)
-assign led_uart_work = ~led_uart_work_output;  // LED: UART transmit in progress (1-second blink)
-assign led_uart_finish = ~led_uart_finish_output;  // LED: UART transmit finished (0.5-second blink)
+// Saídas LED: invertidas porque LEDs estão em ativo-baixo
+assign led = ~led_output;                     // LED: hash SHA-1 computado corresponde ao valor esperado
+assign led_sha1_work = ~led_sha1_work_output;   // LED: computação SHA-1 em progresso (pisca 1 segundo)
+assign led_sha1_finish = ~led_sha1_finish_output;  // LED: computação SHA-1 finalizada (pisca 0.5 segundo)
+assign led_uart_work = ~led_uart_work_output;  // LED: transmissão UART em progresso (pisca 1 segundo)
+assign led_uart_finish = ~led_uart_finish_output;  // LED: transmissão UART finalizada (pisca 0.5 segundo)
 
-// SHA-1 core instantiation
-// Note: reset_n is permanently enabled (hardwired to 1'b1); state machine provides control
+// Instanciação do núcleo SHA-1
+// Nota: reset_n está permanentemente habilitado (conectado a 1'b1); máquina de estados fornece controle
 sha1_core sha1_inst(
     .clk(clk),
     .reset_n(1'b1),
@@ -322,7 +322,7 @@ sha1_core sha1_inst(
     .digest_valid(sha1_core_digest_valid)
 );
 
-// UART RX
+// Recepção UART
 uart_rx #(
     .CLK_FRE(CLK_FRE),
     .BAUD_RATE(UART_FRE)
@@ -335,7 +335,7 @@ uart_rx #(
     .rx_pin(uart_rx)
 );
 
-// UART TX
+// Transmissão UART
 uart_tx #(
     .CLK_FRE(CLK_FRE),
     .BAUD_RATE(UART_FRE)
@@ -348,22 +348,22 @@ uart_tx #(
     .tx_pin(uart_tx)
 );
 
-// SHA-1 state machine main logic
-// Implements proof-of-work mining: iterates nonce until SHA-1(message||nonce) == expected_hash
+// Lógica principal da máquina de estados SHA-1
+// Implementa mineração proof-of-work: itera nonce até SHA-1(mensagem||nonce) == hash_esperado
 always @(posedge clk) begin
-    sha1_init <= 1'b0;  // Strobe: asserted for one cycle to trigger SHA-1 init
-    sha1_next <= 1'b0;  // Strobe: asserted for one cycle to trigger SHA-1 next block
+    sha1_init <= 1'b0;  // Pulso: ativado por um ciclo para disparar inicialização SHA-1
+    sha1_next <= 1'b0;  // Pulso: ativado por um ciclo para disparar próximo bloco SHA-1
 
     case (state)
 STATE_RESET: begin
-             // Initialize all outputs and counters
+             // Inicializa todas as saídas e contadores
              led_output <= 1'b0;
              led_sha1_work_output <= 1'b0;
              led_sha1_finish_output <= 1'b0;
              clock_counter <= 28'd0;
-             nonce <= 32'd0;  // Reset nonce to 0 at startup
+             nonce <= 32'd0;  // Reinicia nonce para 0 na inicialização
 
-             // Wait 10 clocks for system stabilization
+             // Aguarda 10 ciclos de relógio para estabilização do sistema
              if (clock_counter >= 28'd10) begin
                  clock_counter <= 28'd0;
                  state <= STATE_IDLE;
@@ -373,25 +373,25 @@ STATE_RESET: begin
          end
 
 STATE_IDLE: begin
-             // Wait for SHA-1 core ready AND UART buffer full (indicates new message)
+             // Aguarda núcleo SHA-1 pronto E buffer UART cheio (indica nova mensagem)
              
-             // Reset nonce when UART transmission completes (prepare for next message)
+             // Reinicia nonce quando transmissão UART completa (prepara para próxima mensagem)
              if (uart_tx_done_signal) begin
                  nonce <= 32'd0;
              end
              
-             // First nonce increment: triggered by sha1_start and nonce_increment_done flag
-             // Ensures nonce increments exactly once per message buffer
+             // Primeiro incremento de nonce: disparado por sha1_start e bandeira nonce_increment_done
+             // Garante que nonce incrementa exatamente uma vez por buffer de mensagem
              if (sha1_start && !nonce_increment_done) begin
                   if (nonce < DIFFICULTY) begin
                       nonce <= nonce + 1'b1;
                   end else begin
-                      nonce <= 32'd0;  // Reset to 0 after reaching max difficulty
+                      nonce <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
                   end
-                  nonce_increment_done <= 1'b1;  // Set flag to prevent redundant increments
+                  nonce_increment_done <= 1'b1;  // Define bandeira para prevenir incrementos redundantes
               end
               
-              // Transition condition: core ready AND buffer full AND nonce already incremented
+              // Condição de transição: núcleo pronto E buffer cheio E nonce já incrementado
               if (sha1_core_ready && sha1_start && nonce_increment_done) begin
                   state <= STATE_INIT_SHA1;
                   clock_counter <= 28'd0;
@@ -399,16 +399,16 @@ STATE_IDLE: begin
           end
 
 STATE_INIT_SHA1: begin
-             // Trigger SHA-1 core to initialize and process MESSAGE_BLOCK
-             led_sha1_work_output <= 1'b1;  // LED: indicate processing started
-             sha1_init <= 1'b1;  // Strobe: pulse for one cycle to trigger core
+             // Dispara núcleo SHA-1 para inicializar e processar MESSAGE_BLOCK
+             led_sha1_work_output <= 1'b1;  // LED: indica que processamento começou
+             sha1_init <= 1'b1;  // Pulso: dispara por um ciclo para ativar núcleo
              state <= STATE_RUNNING;
              clock_counter <= 28'd0;
          end
 
 STATE_RUNNING: begin
-             // Wait for SHA-1 core to complete (approximately 1 second at 27 MHz)
-             // Actually: counter reaches 27 ≈ 1µs, but SHA-1 typically completes within this window
+             // Aguarda conclusão do núcleo SHA-1 (aproximadamente 1 segundo a 27 MHz)
+             // Na verdade: contador atinge 27 ≈ 1µs, mas SHA-1 normalmente completa neste intervalo
              if (clock_counter >= 28'd27) begin
                  state <= STATE_DONE_WAIT;
                  clock_counter <= 28'd0;
@@ -418,9 +418,9 @@ STATE_RUNNING: begin
          end
 
 STATE_DONE_WAIT: begin
-             // Poll for SHA-1 digest valid signal (result ready)
+             // Pesquisa sinal válido de resumo SHA-1 (resultado pronto)
              if (sha1_core_digest_valid) begin
-                 sha1_digest <= sha1_core_digest;  // Capture result
+                 sha1_digest <= sha1_core_digest;  // Captura resultado
                  sha1_digest_valid <= 1'b1;
                  clock_counter <= 28'd0;
                  state <= STATE_RESULT;
@@ -428,48 +428,48 @@ STATE_DONE_WAIT: begin
          end
 
 STATE_RESULT: begin
-             // Check if computed hash matches expected hash or all test
+             // Verifica se hash computado corresponde ao hash esperado ou teste completo
              if ((sha1_digest == SHA1_EXPECTED)||(nonce >= DIFFICULTY-1)) begin
-                 led_output <= 1'b1;  // LED: match found!
-                 led_sha1_work_output <= 1'b0;  // Turn off work indicator
+                 led_output <= 1'b1;  // LED: correspondência encontrada!
+                 led_sha1_work_output <= 1'b0;  // Desativa indicador de trabalho
                    
-                  // On match: nonce will be transmitted by UART state machine
-                  // Return to IDLE when core ready (wait for next message)
+                  // Em correspondência: nonce será transmitido pela máquina de estados UART
+                  // Retorna a IDLE quando núcleo estiver pronto (aguarda próxima mensagem)
                   if (sha1_core_ready) begin
                       state <= STATE_IDLE;
                       clock_counter <= 28'd0;
                       led_sha1_finish_output <= 1'b0;
                       sha1_digest_valid <= 1'b0;
-                      nonce_increment_done <= 1'b0;  // Reset flag for next message buffer
+                      nonce_increment_done <= 1'b0;  // Reinicia bandeira para próximo buffer de mensagem
 
                   end else begin
-                     // Blink LED every 0.5 seconds while waiting for core (debug indicator)
-                     // At 27MHz, counter threshold 13 = ~481ns per increment
+                     // Pisca LED a cada 0.5 segundos enquanto aguarda núcleo (indicador de depuração)
+                     // A 27MHz, limite do contador 13 = ~481ns por incremento
                      if (clock_counter >= 28'd13) begin
                          clock_counter <= 28'd0;
-                         led_sha1_finish_output <= ~led_sha1_finish_output;  // Toggle LED
+                         led_sha1_finish_output <= ~led_sha1_finish_output;  // Alterna LED
                      end else begin
                          clock_counter <= clock_counter + 1'b1;
                      end
-                 end
+                  end
              end else begin
-                // No match: increment nonce and retry SHA-1 computation
+                // Sem correspondência: incrementa nonce e tenta novamente computação SHA-1
                 led_output <= 1'b0;
                 
-                // On no match: increment nonce for next attempt and recalculate
-                // Wait for core ready before launching next computation
+                // Sem correspondência: incrementa nonce para próxima tentativa e recalcula
+                // Aguarda núcleo pronto antes de iniciar próxima computação
                 if (sha1_core_ready) begin
-                    // Increment nonce for retry attempt (wrap at DIFFICULTY)
+                    // Incrementa nonce para tentativa de repetição (envolve em DIFFICULTY)
                     if (nonce < DIFFICULTY) begin
                         nonce <= nonce + 1'b1;
                     end else begin
-                        nonce <= 32'd0;  // Reset to 0 after reaching max difficulty
+                        nonce <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
                     end
                     
-                    state <= STATE_INIT_SHA1;  // Go back to init for next iteration
+                    state <= STATE_INIT_SHA1;  // Volta ao init para próxima iteração
                     clock_counter <= 28'd0;
-                    sha1_digest_valid <= 1'b0;  // Clear for next computation
-                    led_sha1_work_output <= 1'b1;  // Re-enable work indicator LED
+                    sha1_digest_valid <= 1'b0;  // Limpa para próxima computação
+                    led_sha1_work_output <= 1'b1;  // Reativa LED indicador de trabalho
                 end
             end
         end
@@ -480,53 +480,53 @@ default: begin
     endcase
 end
 
-// UART RX and TX State Machine
-// ===========================
-// Implements buffering of 80 bytes: 40 message bytes + 40 ASCII hex hash bytes
-// Receives entire buffer, then triggers SHA-1 computation
-// On match found, transmits 4-byte nonce result
-// Structure: buffer[0..39] = message, buffer[40..79] = expected hash
+// Máquina de Estados de Recepção e Transmissão UART
+// ===================================================
+// Implementa buffering de 80 bytes: 40 bytes de mensagem + 40 bytes de hash ASCII hex
+// Recebe buffer completo, então dispara computação SHA-1
+// Ao encontrar correspondência, transmite resultado de nonce de 4 bytes
+// Estrutura: buffer[0..39] = mensagem, buffer[40..79] = hash esperado
 
-// Buffer size constant
-localparam BUFFER_SIZE = 80;  // Total: 40 message bytes + 40 ASCII hash bytes
+// Constante de tamanho de buffer
+localparam BUFFER_SIZE = 80;  // Total: 40 bytes de mensagem + 40 bytes de hash ASCII
 
-// UART FSM states
-localparam UART_IDLE         = 2'd0;  // Accumulating bytes in buffer
-localparam UART_BUFFER_FULL  = 2'd1;  // Buffer complete, ready for SHA-1 computation
-localparam UART_TRANSMIT_NONCE = 2'd2; // Transmitting nonce result (4 bytes = 32 bits)
-localparam UART_TX_DONE      = 2'd3;  // Transmission complete
+// Estados da máquina de estados UART
+localparam UART_IDLE         = 2'd0;  // Acumulando bytes no buffer
+localparam UART_BUFFER_FULL  = 2'd1;  // Buffer completo, pronto para computação SHA-1
+localparam UART_TRANSMIT_NONCE = 2'd2; // Transmitindo resultado de nonce (4 bytes = 32 bits)
+localparam UART_TX_DONE      = 2'd3;  // Transmissão completa
 
-// Combinational signals for state-based control
-// Signal: SHA-1 start (asserted when UART buffer is full)
-// This notifies SHA-1 state machine that new message is ready
+// Sinais combinacionais para controle baseado em estado
+// Sinal: início SHA-1 (ativado quando buffer UART está cheio)
+// Isso notifica a máquina de estados SHA-1 que nova mensagem está pronta
 assign sha1_start = (uart_state == UART_BUFFER_FULL) ? 1'b1 : 1'b0;
 
-// Signal: UART transmission complete (asserted when transmission finishes)
-// Notifies SHA-1 state machine to reset nonce for next message
+// Sinal: transmissão UART completa (ativado quando transmissão termina)
+// Notifica a máquina de estados SHA-1 para reiniciar nonce para próxima mensagem
 assign uart_tx_done_signal = (uart_state == UART_TX_DONE) ? 1'b1 : 1'b0;
 
-// UART state machine registers
-reg [1:0] uart_state;           // Current state
+// Registradores da máquina de estados UART
+reg [1:0] uart_state;           // Estado atual
 
-// Dynamic receive buffer
-reg [7:0] buffer [0:BUFFER_SIZE-1];  // 80-byte buffer: [0..39] message, [40..79] hash
+// Buffer de recepção dinâmico
+reg [7:0] buffer [0:BUFFER_SIZE-1];  // Buffer de 80 bytes: [0..39] mensagem, [40..79] hash
 
-reg [6:0] byte_count;           // Receive counter: 0 to 80 (needs 7 bits)
-reg [4:0] tx_index;             // Transmit index: 0 to 3 for 4 nonce bytes (needs 5 bits)
-reg nonce_increment_done;       // Flag: ensures nonce incremented exactly once per buffer
+reg [6:0] byte_count;           // Contador de recepção: 0 a 80 (necessita 7 bits)
+reg [4:0] tx_index;             // Índice de transmissão: 0 a 3 para 4 bytes de nonce (necessita 5 bits)
+reg nonce_increment_done;       // Bandeira: garante que nonce incrementa exatamente uma vez por buffer
 
-// Rising-edge detector: detects arrival of new UART byte
+// Detector de borda de subida: detecta chegada de novo byte UART
 reg rx_valid_reg1;
 reg rx_valid_reg2;
 wire rx_new_byte = rx_valid_reg1 && !rx_valid_reg2;
 
-// UART FSM: handles message reception and result transmission
+// Máquina de estados UART: manipula recepção de mensagem e transmissão de resultado
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-         // Reset: initialize all UART state variables
+         // Reinicia: inicializa todas as variáveis de estado UART
          uart_state <= UART_IDLE;
-         byte_count <= 7'd0;  // Start at 0 (supports up to 80)
-         tx_index <= 5'd0;    // Start at 0 (transmit 4 bytes: indices 0-3)
+         byte_count <= 7'd0;  // Começa em 0 (suporta até 80)
+         tx_index <= 5'd0;    // Começa em 0 (transmite 4 bytes: índices 0-3)
          tx_data <= 8'd0;
          tx_data_valid <= 1'b0;
          rx_valid_reg1 <= 1'b0;
@@ -534,25 +534,25 @@ always @(posedge clk or negedge rst_n) begin
          led_uart_work_output <= 1'b0;
          led_uart_finish_output <= 1'b0;
     end else begin
-        // Rising-edge detection: capture new UART byte arrival
+        // Detecção de borda de subida: captura chegada de novo byte UART
         rx_valid_reg1 <= rx_data_valid;
         rx_valid_reg2 <= rx_valid_reg1;
 
-        // UART FSM main logic
+        // Lógica principal da máquina de estados UART
         case (uart_state)
             //------------------------------------------
 UART_IDLE: begin
-                // Accumulate bytes in buffer as they arrive
-                // byte_count tracks how many bytes received so far (0 to 80)
-                tx_data_valid <= 1'b0;  // Not transmitting yet
+                // Acumula bytes no buffer conforme chegam
+                // byte_count rastreia quantos bytes foram recebidos até agora (0 a 80)
+                tx_data_valid <= 1'b0;  // Ainda não transmitindo
                 led_uart_work_output <= 1'b0;
 
-                // New byte arrived: store it and increment counter
+                // Novo byte chegou: armazena e incrementa contador
                 if (rx_new_byte && byte_count < BUFFER_SIZE) begin
-                    buffer[byte_count] <= rx_data;      // Store at current index
-                    byte_count <= byte_count + 1'b1;    // Increment counter
+                    buffer[byte_count] <= rx_data;      // Armazena no índice atual
+                    byte_count <= byte_count + 1'b1;    // Incrementa contador
                     
-                     // Transition when last byte received (byte_count reaches 79, will increment to 80)
+                     // Transição quando último byte recebido (byte_count atinge 79, incrementará para 80)
                      if (byte_count == BUFFER_SIZE - 1) begin
                          uart_state <= UART_BUFFER_FULL;
                      end
@@ -561,36 +561,36 @@ UART_IDLE: begin
 
              //------------------------------------------
 UART_BUFFER_FULL: begin
-                 // Wait for SHA-1 computation results
-                 // Nonce increment happens in SHA-1 state machine (STATE_IDLE and STATE_RESULT)
+                 // Aguarda resultados de computação SHA-1
+                 // Incremento de nonce acontece na máquina de estados SHA-1 (STATE_IDLE e STATE_RESULT)
                 
-                 // When SHA-1 digest ready, prepare nonce transmission
-                 // Only transmit nonce if SHA-1 hash matches expected value
+                 // Quando resumo SHA-1 está pronto, prepara transmissão de nonce
+                 // Transmite nonce apenas se hash SHA-1 corresponde ao valor esperado
                  if ((sha1_digest_valid && tx_data_ready && (sha1_digest == SHA1_EXPECTED))||(nonce >= DIFFICULTY-1)) begin
-                     // Conditions met: SHA-1 result valid AND UART ready AND hash matches
-                     // Start transmitting the 4-byte nonce result
+                     // Condições atendidas: resultado SHA-1 válido E UART pronto E hash corresponde
+                     // Começa transmissão do resultado de nonce de 4 bytes
                      // Byte 0 (MSB): nonce[31:24]
-                     tx_data <= nonce[31:24];      // Transmit MSB first (big-endian)
+                     tx_data <= nonce[31:24];      // Transmite MSB primeiro (big-endian)
                      tx_data_valid <= 1'b1;
-                     led_uart_work_output <= 1'b1;         // LED: transmit started
-                     tx_index <= 5'd0;                     // Start at index 0
-                     uart_state <= UART_TRANSMIT_NONCE;     // Move to transmission state
+                     led_uart_work_output <= 1'b1;         // LED: transmissão iniciada
+                     tx_index <= 5'd0;                     // Começa no índice 0
+                     uart_state <= UART_TRANSMIT_NONCE;     // Move para estado de transmissão
                  end
              end
 
             //------------------------------------------
 UART_TRANSMIT_NONCE: begin
-                // Transmit 4 nonce bytes (32 bits total)
-                // Transmission order: MSB-first (big-endian) [31:24], [23:16], [15:8], [7:0]
+                // Transmite 4 bytes de nonce (32 bits total)
+                // Ordem de transmissão: MSB-primeiro (big-endian) [31:24], [23:16], [15:8], [7:0]
                 
                 if (tx_data_ready) begin
                     if (tx_index < 5'd3) begin
-                        // More nonce bytes to transmit: prepare next byte
-                        // Byte 0 already sent; need to send bytes 1, 2, 3
-                        // tx_index: 0→1→2→3 (4 transitions for 4 bytes total)
+                        // Mais bytes de nonce para transmitir: prepara próximo byte
+                        // Byte 0 já foi enviado; necessário enviar bytes 1, 2, 3
+                        // tx_index: 0→1→2→3 (4 transições para 4 bytes total)
                         tx_index <= tx_index + 1'b1;
                         
-                        // Extract next byte: use (tx_index + 1) to get next slice
+                        // Extrai próximo byte: usa (tx_index + 1) para obter próximo slice
                         case(tx_index + 1'b1)
                             5'd1:  tx_data <= nonce[23:16];   // Byte 1
                             5'd2:  tx_data <= nonce[15:8];    // Byte 2
@@ -600,9 +600,9 @@ UART_TRANSMIT_NONCE: begin
                         
                         tx_data_valid <= 1'b1;
                     end else begin
-                        // All 4 nonce bytes (indices 0-3) transmitted: finalize
+                        // Todos os 4 bytes de nonce (índices 0-3) transmitidos: finaliza
                         tx_data_valid <= 1'b0;
-                        led_uart_finish_output <= !led_uart_finish_output;  // Toggle LED
+                        led_uart_finish_output <= !led_uart_finish_output;  // Alterna LED
                         uart_state <= UART_TX_DONE;
                     end
                 end
@@ -610,11 +610,11 @@ UART_TRANSMIT_NONCE: begin
 
              //------------------------------------------
 UART_TX_DONE: begin
-                  // Transmission complete: prepare for next message
-                  // Reset byte_count to 0 to receive next message buffer
+                  // Transmissão completa: prepara para próxima mensagem
+                  // Reinicia byte_count para 0 para receber próximo buffer de mensagem
                   byte_count <= 7'd0;
                   uart_state <= UART_IDLE;
-                  // Note: SHA-1 state machine resets nonce when UART transmission completes
+                  // Nota: máquina de estados SHA-1 reinicia nonce quando transmissão UART completa
                end
         endcase
     end
