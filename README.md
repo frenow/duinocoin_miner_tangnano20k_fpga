@@ -1,8 +1,8 @@
 # DuinoCoin FPGA Miner - Tang Nano 20K
 
-## Did you like the project? Leave a star ⭐ or buy me a coffee 💰. 
-### DuinoCoin Wallet: frenow 
-### BTC Wallet: 1HMtKjB7K2bVvuyGySgmFQT2QHfp7zpyzK
+### Did you like the project? Leave a star ⭐ or buy me a coffee 💰. 
+#### DuinoCoin Wallet: frenow 
+#### BTC Wallet: 1HMtKjB7K2bVvuyGySgmFQT2QHfp7zpyzK
 
 A high-performance proof-of-work cryptocurrency miner implementation for the **Sipeed Tang Nano 20K FPGA** board. This project combines Verilog firmware for SHA-1 acceleration with Python control software for seamless integration with the DuinoCoin network.
 
