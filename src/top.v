@@ -407,8 +407,7 @@ STATE_INIT_SHA1: begin
          end
 
 STATE_RUNNING: begin
-             // Aguarda conclusão do núcleo SHA-1 (aproximadamente 1 segundo a 27 MHz)
-             // Na verdade: contador atinge 27 ≈ 1µs, mas SHA-1 normalmente completa neste intervalo
+             // Aguarda conclusão do núcleo SHA-1 contador atinge 27 ≈ 1µs, mas SHA-1 normalmente completa neste intervalo
              if (clock_counter >= 28'd27) begin
                  state <= STATE_DONE_WAIT;
                  clock_counter <= 28'd0;
@@ -443,8 +442,7 @@ STATE_RESULT: begin
                       nonce_increment_done <= 1'b0;  // Reinicia bandeira para próximo buffer de mensagem
 
                   end else begin
-                     // Pisca LED a cada 0.5 segundos enquanto aguarda núcleo (indicador de depuração)
-                     // A 27MHz, limite do contador 13 = ~481ns por incremento
+                     // Pisca LED A 27MHz, limite do contador 13 = ~481ns por incremento (indicador de depuração)
                      if (clock_counter >= 28'd13) begin
                          clock_counter <= 28'd0;
                          led_sha1_finish_output <= ~led_sha1_finish_output;  // Alterna LED
@@ -570,7 +568,7 @@ UART_BUFFER_FULL: begin
                      // Condições atendidas: resultado SHA-1 válido E UART pronto E hash corresponde
                      // Começa transmissão do resultado de nonce de 4 bytes
                      // Byte 0 (MSB): nonce[31:24]
-                     tx_data <= nonce[31:24];      // Transmite MSB primeiro (big-endian)
+                     tx_data <= nonce[31:24];      // Byte 0 Transmite MSB primeiro (big-endian)
                      tx_data_valid <= 1'b1;
                      led_uart_work_output <= 1'b1;         // LED: transmissão iniciada
                      tx_index <= 5'd0;                     // Começa no índice 0
