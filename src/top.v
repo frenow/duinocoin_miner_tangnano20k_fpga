@@ -310,10 +310,9 @@ assign led_uart_work = ~led_uart_work_output;  // LED: transmissão UART em prog
 assign led_uart_finish = ~led_uart_finish_output;  // LED: transmissão UART finalizada (pisca 0.5 segundo)
 
 // Instanciação do núcleo SHA-1
-// Nota: reset_n está permanentemente habilitado (conectado a 1'b1); máquina de estados fornece controle
 sha1_core sha1_inst(
     .clk(clk),
-    .reset_n(1'b1),
+    .reset_n(rst_n),
     .init(sha1_init),
     .next(sha1_next),
     .block(MESSAGE_BLOCK),
@@ -427,7 +426,7 @@ STATE_DONE_WAIT: begin
          end
 
 STATE_RESULT: begin
-             // Verifica se hash computado corresponde ao hash esperado ou teste completo
+             // Verifica se hash computado corresponde ao hash esperado MATCH ou teste completo
              if ((sha1_digest == SHA1_EXPECTED)||(nonce >= DIFFICULTY-1)) begin
                  led_output <= 1'b1;  // LED: correspondência encontrada!
                  led_sha1_work_output <= 1'b0;  // Desativa indicador de trabalho
@@ -511,7 +510,7 @@ reg [7:0] buffer [0:BUFFER_SIZE-1];  // Buffer de 80 bytes: [0..39] mensagem, [4
 
 reg [6:0] byte_count;           // Contador de recepção: 0 a 80 (necessita 7 bits)
 reg [4:0] tx_index;             // Índice de transmissão: 0 a 3 para 4 bytes de nonce (necessita 5 bits)
-reg nonce_increment_done;       // Bandeira: garante que nonce incrementa exatamente uma vez por buffer
+reg nonce_increment_done;       // flag: garante que nonce incrementa exatamente uma vez por buffer
 
 // Detector de borda de subida: detecta chegada de novo byte UART
 reg rx_valid_reg1;
