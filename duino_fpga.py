@@ -7,7 +7,7 @@ import time  # Para temporização e timestamps
 import serial
 # Configurações
 COM_PORT = "COM9"
-BAUDRATE = 115200
+BAUDRATE = 115200 # Alterado 115200
 TIMEOUT = 60
 NODE_ADDRESS = '92.246.129.145'  # IP do servidor DuinoCoin
 NODE_PORT = 5089  # Porta do servidor (como int, não string)

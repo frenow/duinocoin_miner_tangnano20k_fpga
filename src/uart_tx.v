@@ -1,15 +1,17 @@
+`default_nettype none
+
 module uart_tx
 #(
 	parameter CLK_FRE = 27,      //clock frequency(Mhz)
 	parameter BAUD_RATE = 115200 //serial baud rate
 )
 (
-	input                        clk,              //clock input
-	input                        rst_n,            //asynchronous reset input, low active 
-	input[7:0]                   tx_data,          //data to send
-	input                        tx_data_valid,    //data to be sent is valid
-	output reg                   tx_data_ready,    //send ready
-	output                       tx_pin            //serial data output
+	input wire clk,              //clock input
+	input wire rst_n,            //asynchronous reset input, low active 
+	input wire [7:0] tx_data,           //data to send
+	input wire tx_data_valid,           //data to be sent is valid
+	output reg  tx_data_ready,    //send ready
+	output wire tx_pin            //serial data output
 );
 //calculates the clock cycle for baud rate 
 localparam                       CYCLE = CLK_FRE * 1000000 / BAUD_RATE;
