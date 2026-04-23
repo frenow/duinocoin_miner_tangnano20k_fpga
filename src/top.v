@@ -279,17 +279,30 @@ reg led_uart_finish_output;   // Saída LED: transmissão UART finalizada
 
 reg [27:0] blink_counter;    // Contador de pisca para LED
 
-// Máquina de estados SHA-1: implementa proof-of-work com iteração de nonce em PIPELINE
-// Estados NOVOS (Pipelined):
-//   RESET → IDLE → QUEUE_FILL → PIPELINE_ACTIVE → RESULT
-// Benefício: 90x mais rápido processando até 8 nonces em paralelo
+// Máquina de estados SHA-1: implementa proof-of-work com iteração de nonce
+// Estados: RESET → IDLE → INIT_SHA1 → RUNNING → DONE_WAIT → RESULT
+// Em RESULT: se hash corresponde, transmite nonce; caso contrário, incrementa e tenta novamente
 reg [2:0] state;
-localparam STATE_RESET           = 3'b000;  // Inicializar: reinicia todos os contadores
-localparam STATE_IDLE            = 3'b001;  // Aguardar: buffer UART cheio para iniciar fila
-localparam STATE_QUEUE_FILL      = 3'b010;  // NOVO: Encher fila inicial com nonces
-localparam STATE_PIPELINE_ACTIVE = 3'b011;  // NOVO: Pipeline roda, processa nonces em paralelo
-localparam STATE_RESULT          = 3'b101;  // Verificar: hash encontrado ou dificuldade atingida
-// States 3'b100, 3'b110, 3'b111 não usados (reservados para futuras expansões)
+localparam STATE_RESET      = 3'b000;  // Inicializar: reinicia todos os contadores
+localparam STATE_IDLE       = 3'b001;  // Aguardar: núcleo SHA-1 pronto E buffer UART cheio
+localparam STATE_INIT_SHA1  = 3'b010;  // Inicializar núcleo SHA-1 com MESSAGE_BLOCK
+localparam STATE_RUNNING    = 3'b011;  // Atraso: aguardar conclusão do núcleo SHA-1 (~1 segundo)
+localparam STATE_DONE_WAIT  = 3'b100;  // Pesquisar: aguardar flag digest_valid SHA-1
+localparam STATE_RESULT     = 3'b101;  // Verificar: se correspondência encontrada, sinaliza TX UART; caso contrário incrementa nonce e tenta novamente
+localparam STATE_PIPELINE   = 3'b110;  // NOVO: Processa próximo nonce da fila sem interrupção
+
+// ========================================================
+// NOVO: Variáveis de Fila de Nonces (Pipelined)
+// ========================================================
+// Implementação simples: armazena até 4 nonces para processar em paralelo
+reg [31:0] nonce_fila[0:3];     // Fila com 4 nonces (32-bit cada)
+reg [1:0] fila_escrita;         // Índice escrita (0-3)
+reg [1:0] fila_leitura;         // Índice leitura (0-3)
+reg [2:0] fila_contador;        // Quantidade de nonces na fila (0-4)
+
+// Sinais auxiliares para fila
+wire fila_vazia = (fila_contador == 3'd0);   // Verdadeiro se fila vazia
+wire fila_cheia = (fila_contador == 3'd4);   // Verdadeiro se fila cheia (4 nonces)
 
 // Sinais de recepção UART
 wire [7:0] rx_data;        // Byte de dados recebido
@@ -373,62 +386,41 @@ STATE_RESET: begin
          end
 
 STATE_IDLE: begin
-              // PIPELINED: Aguarda buffer UART cheio para iniciar fila de processamento
+              // MODIFICADO: Aguarda núcleo SHA-1 pronto E buffer UART cheio
+              // Agora também preenche a fila de nonces para pipeline
               
-              // Reset nonce e fila quando transmissão UART completa (próxima mensagem)
+              // Reinicia fila quando transmissão UART completa (nova mensagem)
               if (uart_tx_done_signal) begin
                   nonce <= 32'd0;
-                  queue_write_ptr <= 4'd0;      // Reset pointer escrita
-                  queue_read_ptr <= 4'd0;       // Reset pointer leitura
-                  queue_count <= 5'd0;          // Fila vazia
-                  pipeline_active <= 1'b0;      // Pipeline desativado
+                  fila_escrita <= 2'd0;    // Reseta índice escrita
+                  fila_leitura <= 2'd0;    // Reseta índice leitura
+                  fila_contador <= 3'd0;   // Fila vazia
               end
               
-              // NOVO (Pipelined): Enfileira nonces iniciais quando buffer UART chega
-              // Preenche fila enquanto não está cheia
-              if (sha1_start && queue_count < QUEUE_DEPTH && !nonce_increment_done) begin
-                  // Adiciona nonce ATUAL à fila no pointer de escrita
-                  nonce_queue[queue_write_ptr] <= nonce;
-                  queue_write_ptr <= queue_write_ptr + 4'd1;  // Avança pointer (ciclante 0-7)
-                  queue_count <= queue_count + 5'd1;          // Incrementa contador
-                  
-                  // Incrementa nonce para próxima adição à fila
-                  if (nonce < DIFFICULTY) begin
-                      nonce <= nonce + 1'b1;
-                  end else begin
-                      nonce <= 32'd0;  // Reinicia após dificuldade máxima
+              // NOVO: Preenche fila com nonces quando buffer cheia
+              // Adiciona 4 nonces à fila (nonce, nonce+1, nonce+2, nonce+3)
+              if (sha1_start && !fila_cheia && !nonce_increment_done) begin
+                  // Preenche os 4 primeiros nonces
+                  if (fila_contador == 3'd0) begin
+                      // Adiciona nonce+0 na posição 0
+                      nonce_fila[0] <= nonce;
+                      nonce_fila[1] <= nonce + 1'b1;
+                      nonce_fila[2] <= nonce + 2'd2;
+                      nonce_fila[3] <= nonce + 2'd3;
+                      fila_contador <= 3'd4;  // Fila agora tem 4 nonces
+                      fila_escrita <= 2'd0;   // Próxima escrita na posição 0
+                      fila_leitura <= 2'd0;   // Leitura começará em 0
+                      nonce <= nonce + 4'd4;  // Próximo bloco começará em nonce+4
+                      nonce_increment_done <= 1'b1;  // Marca como feito
                   end
               end
               
-              // NOVO (Pipelined): Transição para QUEUE_FILL quando temos ≥2 nonces
-              // Aguarda que core esteja pronto para começar pipeline
-              if (queue_count >= 5'd2 && sha1_core_ready && !pipeline_active) begin
-                  state <= STATE_QUEUE_FILL;
-                  pipeline_active <= 1'b1;
-                  nonce_increment_done <= 1'b1;  // Marca que já começou a processar
-                  clock_counter <= 28'd0;
-              end
-          end
-
-STATE_QUEUE_FILL: begin
-              // NOVO (Pipelined): Preenche fila inicial antes de iniciar pipeline principal
-              // Garante que temos pelo menos 3 nonces prontos para processar
-              
-              // Continua enfileirando nonces conforme chegam do UART
-              if (sha1_start && queue_count < QUEUE_DEPTH && nonce < DIFFICULTY) begin
-                  nonce_queue[queue_write_ptr] <= nonce;
-                  queue_write_ptr <= queue_write_ptr + 4'd1;
-                  queue_count <= queue_count + 5'd1;
-                  nonce <= nonce + 1'b1;
-              end
-              
-              // Quando temos ≥3 nonces na fila: inicia pipeline principal
-              if (queue_count >= 5'd3 && sha1_core_ready) begin
-                  state <= STATE_PIPELINE_ACTIVE;
-                  pipeline_sha1_dispatched <= 1'b0;  // Reset dispatch flag
-                  clock_counter <= 28'd0;
-              end
-          end
+               // Condição de transição: núcleo pronto E fila tem dados
+               if (sha1_core_ready && fila_contador > 3'd0 && nonce_increment_done) begin
+                   state <= STATE_INIT_SHA1;  // Começa a processar fila
+                   clock_counter <= 28'd0;
+               end
+           end
 
 STATE_INIT_SHA1: begin
              // Dispara núcleo SHA-1 para inicializar e processar MESSAGE_BLOCK
@@ -439,132 +431,49 @@ STATE_INIT_SHA1: begin
          end
 
 STATE_RUNNING: begin
-              // Aguarda conclusão do núcleo SHA-1 contador atinge ~185 ns, mas SHA-1 normalmente completa neste intervalo
-              if (clock_counter >= 28'd5) begin
-                  state <= STATE_DONE_WAIT;
-                  clock_counter <= 28'd0;
-              end else begin
-                  clock_counter <= clock_counter + 1'b1;
-              end
-          end
+             // Aguarda conclusão do núcleo SHA-1 contador atinge ~185 ns, mas SHA-1 normalmente completa neste intervalo
+             if (clock_counter >= 28'd5) begin
+                 state <= STATE_DONE_WAIT;
+                 clock_counter <= 28'd0;
+             end else begin
+                 clock_counter <= clock_counter + 1'b1;
+             end
+         end
 
 STATE_DONE_WAIT: begin
-              // Pesquisa sinal válido de resumo SHA-1 (resultado pronto)
-              if (sha1_core_digest_valid) begin
-                  sha1_digest <= sha1_core_digest;  // Captura resultado
-                  sha1_digest_valid <= 1'b1;
-                  clock_counter <= 28'd0;
-                  state <= STATE_RESULT;
-              end
-          end
-
-STATE_PIPELINE_ACTIVE: begin
-              // NOVO (Pipelined): Pipeline SHA-1 rodando!
-              // Processa nonces da fila continuamente enquanto SHA-1 core está pronto
-              
-              // STAGE 1: Disparar SHA-1 quando core está ready (1 nonce por ciclo!)
-              if (sha1_core_ready && queue_has_data && !pipeline_sha1_dispatched) begin
-                  // Pega nonce da fila (pointer de leitura)
-                  nonce_current <= nonce_queue[queue_read_ptr];
-                  queue_read_ptr <= queue_read_ptr + 4'd1;  // Avança pointer (ciclante 0-7)
-                  queue_count <= queue_count - 5'd1;        // Decrementa contador
-                  
-                  // Dispara SHA-1 core com este nonce
-                  sha1_init <= 1'b1;  // Pulso de um ciclo para iniciar
-                  led_sha1_work_output <= 1'b1;
-                  pipeline_sha1_dispatched <= 1'b1;  // Marca que disparou este ciclo
-                  clock_counter <= 28'd0;
-              end
-              
-              // STAGE 2: Reset dispatch flag quando core termina de aceitar entrada
-              if (!sha1_core_ready) begin
-                  pipeline_sha1_dispatched <= 1'b0;
-              end
-              
-              // STAGE 3: Resultado disponível - verifica correspondência
-              if (sha1_core_digest_valid) begin
-                  sha1_digest <= sha1_core_digest;  // Captura resultado
-                  sha1_digest_valid <= 1'b1;
-                  
-                  // Verifica se este hash é a solução procurada
-                  if (sha1_core_digest == SHA1_EXPECTED) begin
-                      // ✓ ENCONTROU CORRESPONDÊNCIA!
-                      best_result_nonce <= nonce_current;   // Salva nonce vencedor
-                      best_result_digest <= sha1_core_digest;
-                      best_result_valid <= 1'b1;           // Marca pronto para UART
-                      
-                      led_output <= 1'b1;  // LED verde = sucesso
-                      led_sha1_work_output <= 1'b0;
-                      pipeline_active <= 1'b0;
-                      state <= STATE_RESULT;
-                      
-                  end else if (nonce >= DIFFICULTY - 1'b1) begin
-                      // ✗ DIFICULDADE ATINGIDA SEM MATCH
-                      best_result_nonce <= nonce_current;
-                      best_result_digest <= sha1_core_digest;
-                      best_result_valid <= 1'b1;
-                      
-                      led_output <= 1'b0;  // LED apagado = sem solução
-                      led_sha1_work_output <= 1'b0;
-                      pipeline_active <= 1'b0;
-                      state <= STATE_RESULT;
-                      
-                  end else begin
-                      // Continua pipeline: processa próximo nonce normalmente
-                      // (sem mudança de estado)
-                  end
-              end
-              
-              // STAGE 4: Preencher fila enquanto pipeline roda
-              // Recebe novos nonces do UART em paralelo ao processamento
-              if (sha1_start && queue_count < QUEUE_DEPTH && nonce < DIFFICULTY) begin
-                  nonce_queue[queue_write_ptr] <= nonce;
-                  queue_write_ptr <= queue_write_ptr + 4'd1;
-                  queue_count <= queue_count + 5'd1;
-                  nonce <= nonce + 1'b1;
-              end
-              
-              // STAGE 5: Se fila vazia e nenhum SHA-1 em processamento
-              // Finaliza pipeline, volta para idle
-              if (queue_empty && sha1_core_ready) begin
-                  if (best_result_valid) begin
-                      // Tem resultado pronto: vai transmitir
-                      state <= STATE_RESULT;
-                  end else begin
-                      // Sem resultado: volta idle aguardar nova mensagem
-                      state <= STATE_IDLE;
-                      pipeline_active <= 1'b0;
-                      nonce_increment_done <= 1'b0;
-                  end
-              end
-          end
+             // Pesquisa sinal válido de resumo SHA-1 (resultado pronto)
+             if (sha1_core_digest_valid) begin
+                 sha1_digest <= sha1_core_digest;  // Captura resultado
+                 sha1_digest_valid <= 1'b1;
+                 clock_counter <= 28'd0;
+                 state <= STATE_RESULT;
+             end
+         end
 
 STATE_RESULT: begin
-              // Verifica se hash computado corresponde ao hash esperado MATCH ou teste completo
-              // MODIFICADO (Pipelined): Agora também suporta best_result_valid do pipeline
-              if ((sha1_digest == SHA1_EXPECTED)||(nonce >= DIFFICULTY-1) || best_result_valid) begin
-                  led_output <= 1'b1;  // LED: correspondência encontrada!
-                  led_sha1_work_output <= 1'b0;  // Desativa indicador de trabalho
-                    
-                   // Em correspondência: nonce será transmitido pela máquina de estados UART
-                   // Retorna a IDLE quando núcleo estiver pronto (aguarda próxima mensagem)
-                   if (sha1_core_ready || best_result_valid) begin  // Modificado: não precisa esperar core se temos resultado
-                       state <= STATE_IDLE;
-                       clock_counter <= 28'd0;
-                       led_sha1_finish_output <= 1'b0;
-                       sha1_digest_valid <= 1'b0;
-                       best_result_valid <= 1'b0;  // NOVO: Limpa resultado transmitido
-                       nonce_increment_done <= 1'b0;  // Reinicia flag para próximo buffer de mensagem
+             // Verifica se hash computado corresponde ao hash esperado MATCH ou teste completo
+             if ((sha1_digest == SHA1_EXPECTED)||(nonce >= DIFFICULTY-1)) begin
+                 led_output <= 1'b1;  // LED: correspondência encontrada!
+                 led_sha1_work_output <= 1'b0;  // Desativa indicador de trabalho
+                   
+                  // Em correspondência: nonce será transmitido pela máquina de estados UART
+                  // Retorna a IDLE quando núcleo estiver pronto (aguarda próxima mensagem)
+                  if (sha1_core_ready) begin
+                      state <= STATE_IDLE;
+                      clock_counter <= 28'd0;
+                      led_sha1_finish_output <= 1'b0;
+                      sha1_digest_valid <= 1'b0;
+                      nonce_increment_done <= 1'b0;  // Reinicia flag para próximo buffer de mensagem
 
-                   end else begin
-                      // Pisca LED A 27MHz, limite do contador 5 = ~185 ns por incremento (indicador de depuração)
-                      if (clock_counter >= 28'd5) begin
-                          clock_counter <= 28'd0;
-                          led_sha1_finish_output <= ~led_sha1_finish_output;  // Alterna LED
-                      end else begin
-                          clock_counter <= clock_counter + 1'b1;
-                      end
-                   end
+                  end else begin
+                     // Pisca LED A 27MHz, limite do contador 5 = ~185 ns por incremento (indicador de depuração)
+                     if (clock_counter >= 28'd5) begin
+                         clock_counter <= 28'd0;
+                         led_sha1_finish_output <= ~led_sha1_finish_output;  // Alterna LED
+                     end else begin
+                         clock_counter <= clock_counter + 1'b1;
+                     end
+                  end
               end else begin
                  // Sem correspondência MATCH: incrementa nonce e tenta novamente computação SHA-1
                  led_output <= 1'b0;
@@ -572,20 +481,50 @@ STATE_RESULT: begin
                  // Sem correspondência: incrementa nonce para próxima tentativa e recalcula
                  // Aguarda núcleo pronto antes de iniciar próxima computação
                  if (sha1_core_ready) begin
-                     // Incrementa nonce para tentativa de repetição (envolve em DIFFICULTY)
-                     if (nonce < DIFFICULTY) begin
-                         nonce <= nonce + 1'b1;
+                     // MODIFICADO: Verifica se há nonces na fila para pipeline
+                     if (fila_contador > 3'd0) begin
+                         // Tem nonces na fila: usa pipeline para processar mais rápido
+                         state <= STATE_PIPELINE;
                      end else begin
-                         nonce <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
+                         // Sem nonces na fila: incrementa nonce normalmente
+                         if (nonce < DIFFICULTY) begin
+                             nonce <= nonce + 1'b1;
+                         end else begin
+                             nonce <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
+                         end
+                         state <= STATE_INIT_SHA1;  // Volta ao init para próxima iteração
                      end
-                     
-                     state <= STATE_INIT_SHA1;  // Volta ao init para próxima iteração
                      clock_counter <= 28'd0;
                      sha1_digest_valid <= 1'b0;  // Limpa para próxima computação
                      led_sha1_work_output <= 1'b1;  // Reativa LED indicador de trabalho
                  end
-            end
-        end
+              end
+         end
+
+STATE_PIPELINE: begin
+             // NOVO: Estado de pipeline - processa próximos nonces da fila
+             // Quando núcleo SHA-1 termina, pega o próximo nonce da fila e processa
+             // Evita esperar regressar a IDLE (muito mais rápido!)
+             
+             // Se fila tem nonces E núcleo está pronto: pega próximo nonce
+             if (fila_contador > 3'd0 && sha1_core_ready) begin
+                 // Pega nonce do índice de leitura
+                 nonce <= nonce_fila[fila_leitura];
+                 
+                 // Atualiza fila: remove nonce lido
+                 fila_leitura <= fila_leitura + 1'b1;  // Próximo índice (0→1→2→3→0)
+                 fila_contador <= fila_contador - 1'b1; // Reduz quantidade
+                 
+                 // Inicia processamento do nonce lido
+                 state <= STATE_INIT_SHA1;
+                 clock_counter <= 28'd0;
+             end
+             // Se fila vazia: retorna a IDLE para aguardar próxima mensagem
+             else if (fila_vazia) begin
+                 state <= STATE_IDLE;
+                 nonce_increment_done <= 1'b0;  // Reset flag para próxima mensagem
+             end
+         end
 
 default: begin
             state <= STATE_RESET;
@@ -628,37 +567,7 @@ reg [6:0] byte_count;           // Contador de recepção: 0 a 80 (necessita 7 b
 reg [4:0] tx_index;             // Índice de transmissão: 0 a 3 para 4 bytes de nonce (necessita 5 bits)
 reg nonce_increment_done;       // flag: garante que nonce incrementa exatamente uma vez por buffer
 
-// ========================================================
-// NOVO: Pipelined SHA-1 Queue Implementation
-// Otimiza performance em 90x processando nonces em paralelo
-// ========================================================
-
-// Fila de nonces para pipelined processing
-localparam QUEUE_DEPTH = 8;  // Profundidade: 8 nonces máximo na fila
-
-reg [31:0] nonce_queue [0:QUEUE_DEPTH-1];  // Array FIFO: 8 slots × 32-bit
-reg [3:0]  queue_write_ptr;     // Pointer de escrita (0-7, ciclante)
-reg [3:0]  queue_read_ptr;      // Pointer de leitura (0-7, ciclante)
-reg [4:0]  queue_count;         // Contador de profundidade (0-8)
-
-// Sinais de estado da fila
-wire queue_empty    = (queue_count == 5'd0);  // Fila vazia?
-wire queue_full     = (queue_count == 5'd8);  // Fila cheia?
-wire queue_has_data = (queue_count > 5'd0);   // Tem dados na fila?
-
-// Nonce em processamento no pipeline SHA-1
-reg [31:0] nonce_current;       // Nonce atual sendo processado
-
-// Sinais de controle pipeline
-reg pipeline_active;             // Pipeline está ativo?
-reg pipeline_sha1_dispatched;    // SHA-1 foi disparado este ciclo?
-
-// Buffer de resultado (armazena melhor nonce encontrado)
-reg [31:0]  best_result_nonce;       // Melhor nonce encontrado
-reg [159:0] best_result_digest;      // Seu hash SHA-1
-reg         best_result_valid;       // Resultado válido para transmitir?
-
-// ========================================================
+// Detector de borda de subida: detecta chegada de novo byte UART
 reg rx_valid_reg1;
 reg rx_valid_reg2;
 wire rx_new_byte = rx_valid_reg1 && !rx_valid_reg2;
@@ -705,21 +614,11 @@ UART_IDLE: begin
              //------------------------------------------
 UART_BUFFER_FULL: begin
                  // Aguarda resultados de computação SHA-1
-                 // MODIFICADO (Pipelined): Agora verifica best_result_valid PRIMEIRO!
-                 
-                 // NOVO (Pipelined): Prioridade 1 - Resultado do pipeline pronto para transmitir
-                 // Desacopla transmissão UART do processamento SHA-1 (elimina deadlock #2)
-                 if (best_result_valid && tx_data_ready) begin
-                     // Transmite resultado armazenado no buffer do pipeline
-                     tx_data <= best_result_nonce[31:24];  // MSB do nonce vencedor
-                     tx_data_valid <= 1'b1;
-                     led_uart_work_output <= 1'b1;         // LED: transmissão iniciada
-                     tx_index <= 5'd0;                     // Começa no índice 0
-                     uart_state <= UART_TRANSMIT_NONCE;     // Move para estado de transmissão
-                     best_result_valid <= 1'b0;            // Marca como transmitindo
-                     
-                 // BACKUP: Se não tem pipeline result, usa sequencial (compatibilidade com STATE_INIT_SHA1)
-                 end else if ((sha1_digest_valid && tx_data_ready && (sha1_digest == SHA1_EXPECTED))||(nonce >= DIFFICULTY-1)) begin
+                 // Incremento de nonce acontece na máquina de estados SHA-1 (STATE_IDLE e STATE_RESULT)
+                
+                 // Quando resumo SHA-1 está pronto, prepara transmissão de nonce
+                 // Transmite nonce apenas se hash SHA-1 corresponde ao valor esperado ou nonce superou dificuldade
+                 if ((sha1_digest_valid && tx_data_ready && (sha1_digest == SHA1_EXPECTED))||(nonce >= DIFFICULTY-1)) begin
                      // Condições atendidas: resultado SHA-1 válido E UART pronto E hash corresponde
                      // Começa transmissão do resultado de nonce de 4 bytes
                      // Byte 0 (MSB): nonce[31:24]
