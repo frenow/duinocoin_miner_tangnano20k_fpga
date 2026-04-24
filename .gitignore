@@ -1,0 +1,34 @@
+# IDE and Editor Files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+
+# Build and Compilation
+impl/
+*.json
+*.rpt
+*.txt
+*.log
+*.html
+
+# Virtual Environments
+venv/
+ENV/
+env/
+.env
+
+# OS-specific
+.DS_Store
+Thumbs.db
+.windows-build-tools/
+*.bak
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
