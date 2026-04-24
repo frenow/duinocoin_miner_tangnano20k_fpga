@@ -273,6 +273,12 @@ MINERADOR duinoCoin FPGA TANGNANO 20K by @frenow
 | **Max Hashrate** | ~1 MH/s (theoretical, depends on difficulty) |
 | **UART Speed** | 115,200 bps (≈11.52 KB/s) |
 
+### Resource Utilization History
+
+| Version | Resource | Usage | Utilization | Hashrate |
+|---------|----------|-------|-------------|----------|
+| v1 | LUT | 4895/20736 | 24% | 313 kH/s |
+
 ### Real-World Performance
 
 Actual hashrate depends on several factors:
