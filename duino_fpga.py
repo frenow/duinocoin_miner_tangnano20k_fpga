@@ -5,6 +5,39 @@ from socket import socket, SOL_SOCKET, SO_REUSEADDR  # Socket com opções
 import sys  # Para argumentos do sistema
 import time  # Para temporização e timestamps
 import serial
+
+# ===== DEFINIÇÕES DE CORES ANSI =====
+class Colors:
+    """Cores ANSI para terminal"""
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    
+    # Cores de Texto
+    BLACK = '\033[30m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    
+    # Cores de Fundo
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
+    BG_BLUE = '\033[44m'
+    BG_MAGENTA = '\033[45m'
+    BG_CYAN = '\033[46m'
+    
+    # Estilos
+    SUCCESS = f'{BOLD}{GREEN}'
+    ERROR = f'{BOLD}{RED}'
+    WARNING = f'{BOLD}{YELLOW}'
+    INFO = f'{BOLD}{CYAN}'
+    DEBUG = f'{BOLD}{MAGENTA}'
+
 # Configurações
 COM_PORT = "COM9"
 BAUDRATE = 115200 # Alterado 115200
@@ -26,7 +59,7 @@ def send_to_fpga(data):
         with serial.Serial(COM_PORT, BAUDRATE, timeout=TIMEOUT) as ser:
             # Envia 80 bytes
             ser.write(data)
-            print(f"[ENVIO] {data.decode('ascii', errors='ignore')} (80 bytes)")
+            print(f"{Colors.INFO}📤 [ENVIO]{Colors.RESET} {data.decode('ascii', errors='ignore')} (80 bytes)")
             
             # Recebe 4 bytes do nonce (32 bits)
             response = b""
@@ -41,7 +74,7 @@ def send_to_fpga(data):
             return nonce
                 
     except Exception as e:
-        print(f"[ERRO FPGA] {e}")
+        print(f"{Colors.ERROR}❌ [ERRO FPGA]{Colors.RESET} {e}")
         return None
 def current_time():
     """Retorna a hora atual formatada como HH:MM:SS"""
@@ -59,7 +92,7 @@ def create_socket():
         soc.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         return soc
     except Exception as e:
-        print(f"[ERRO] Falha ao criar socket: {e}")
+        print(f"{Colors.ERROR}❌ [ERRO]{Colors.RESET} Falha ao criar socket: {e}")
         return None
 def connect_to_server(soc):
     """
@@ -72,13 +105,13 @@ def connect_to_server(soc):
         True se conexão bem-sucedida, False caso contrário
     """
     try:
-        print('MINERADOR duinoCoin FPGA TANGNANO 20K by @frenow')
-        print(f'{current_time()} : Conectando ao servidor {NODE_ADDRESS}:{NODE_PORT}...')
+        print(f"{Colors.BOLD}{Colors.CYAN}⛏️  MINERADOR duinoCoin FPGA TANGNANO 20K v2{Colors.RESET} {Colors.YELLOW}by @frenow{Colors.RESET}")
+        print(f'{Colors.INFO}🔗 [{current_time()}]{Colors.RESET} Conectando ao servidor {Colors.YELLOW}{NODE_ADDRESS}:{NODE_PORT}{Colors.RESET}...')
         soc.connect((NODE_ADDRESS, NODE_PORT))
-        print(f'{current_time()} : Conexão estabelecida com sucesso')
+        print(f'{Colors.SUCCESS}✓ [{current_time()}]{Colors.RESET} Conexão estabelecida com sucesso')
         return True
     except Exception as e:
-        print(f'{current_time()} : Falha na conexão: {e}')
+        print(f'{Colors.ERROR}✗ [{current_time()}]{Colors.RESET} Falha na conexão: {e}')
         return False
 # Configurações do minerador
 username = 'frenow'         #altere aqui a sua wallet
@@ -101,7 +134,7 @@ while True:
         
         # Recebe versão do servidor
         server_version = soc.recv(100).decode().strip()
-        print(f'{current_time()} : Server Version: {server_version}')
+        print(f'{Colors.SUCCESS}✓ [{current_time()}]{Colors.RESET} Server Version: {Colors.YELLOW}{server_version}{Colors.RESET}')
         
         # ===== SEÇÃO PRINCIPAL DE MINERAÇÃO =====
         # Loop que permanece enquanto conectado ao servidor
@@ -110,34 +143,35 @@ while True:
             job_count += 1
             
             # Solicita novo job (trabalho) ao servidor
-            job_request = f"JOB,{username},LOW,{mining_key}"
+            job_request = f"JOB,{username},MEDIUM,{mining_key}"
             soc.send(bytes(job_request, encoding="utf8"))
             
             # Recebe o job do servidor no formato: hash_base,expected_hash,difficulty
             job_data = soc.recv(1024).decode().rstrip("\n")
-            print(f'[JOB #{job_count}] Recebido: {job_data}')
+            print(f'{Colors.INFO}📦 [JOB #{job_count}]{Colors.RESET} Recebido: {Colors.YELLOW}{job_data}{Colors.RESET}')
             
             # Separa os componentes do job
             job_parts = job_data.split(",")
             if len(job_parts) < 3:
-                print(f'{current_time()} : Formato de job inválido: {job_data}')
+                print(f'{Colors.ERROR}✗ [{current_time()}]{Colors.RESET} Formato de job inválido: {job_data}')
                 break
             
             message_hash = job_parts[0]      # Hash da mensagem
             expected_hash = job_parts[1]     # Hash esperado
             difficulty = job_parts[2]        # Dificuldade
             
-            if (int(difficulty) > 90000): # minerador fpga v1 só irá funcionar com dificuldade até 90000
+            if (int(difficulty) > 3200000): # minerador fpga v1 só irá funcionar com dificuldade até 3200000
+                print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.RESET} Dificuldade muito alta: {difficulty} (máximo suportado: 3.2M)')
                 break
             
             # Combina mensagem + hash esperado (80 bytes total: 40+40)
             payload = (message_hash + expected_hash).encode('ascii')
             
             if len(payload) != 80:
-                print(f'{current_time()} : Payload inválido ({len(payload)} bytes, esperado 80)')
+                print(f'{Colors.ERROR}✗ [{current_time()}]{Colors.RESET} Payload inválido ({len(payload)} bytes, esperado 80)')
                 break
             
-            print(f'[MINERANDO] Difficulty: {difficulty}')
+            print(f'{Colors.DEBUG}⚙️  [MINERANDO]{Colors.RESET} Dificuldade: {Colors.YELLOW}{difficulty}{Colors.RESET}')
             
             # Marca o tempo de início do cálculo de hash
             hashingStartTime = time.time()
@@ -146,7 +180,7 @@ while True:
             nonce = send_to_fpga(payload)
             
             if nonce is None:
-                print(f'{current_time()} : Timeout na FPGA, solicitando novo job')
+                print(f'{Colors.ERROR}✗ [{current_time()}]{Colors.RESET} Timeout na FPGA, solicitando novo job')
                 break
             
             # Hash encontrado! Calcula estatísticas
@@ -165,28 +199,31 @@ while True:
             
             # Aguarda feedback do servidor
             feedback = soc.recv(1024).decode().rstrip("\n").upper()
-            print(f'[FEEDBACK] {feedback}')
             
             # Se a resposta foi aceita
             if feedback == "GOOD":
-                print(f'{current_time()} : ✓ Share ACEITA | '
-                      f'Nonce: {nonce} | '
-                      f'Hashrate: {int(hashrate/1000)} kH/s | '
-                      f'Difficulty: {difficulty}')
+                print(f'{Colors.SUCCESS}✓ [{current_time()}]{Colors.RESET} Share {Colors.GREEN}ACEITA{Colors.RESET} | '
+                      f'💰 Nonce: {Colors.YELLOW}{nonce}{Colors.RESET} | '
+                      f'⚡ Hashrate: {Colors.CYAN}{int(hashrate/1000)}{Colors.RESET} kH/s | '
+                      f'🎯 Dificuldade: {Colors.YELLOW}{difficulty}{Colors.RESET}')
                 
             # Se a resposta foi rejeitada
             elif feedback == "BAD":
-                print(f'{current_time()} : ✗ Share REJEITADA | '
-                      f'Nonce: {nonce} | '
-                      f'Hashrate: {int(hashrate/1000)} kH/s | '
-                      f'Difficulty: {difficulty}')
+                print(f'{Colors.ERROR}✗ [{current_time()}]{Colors.RESET} Share {Colors.RED}REJEITADA{Colors.RESET} | '
+                      f'💰 Nonce: {Colors.YELLOW}{nonce}{Colors.RESET} | '
+                      f'⚡ Hashrate: {Colors.CYAN}{int(hashrate/1000)}{Colors.RESET} kH/s | '
+                      f'🎯 Dificuldade: {Colors.YELLOW}{difficulty}{Colors.RESET}')
             else:
-                print(f'{current_time()} : ? Resposta desconhecida: {feedback}')
+                print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.RESET} Resposta desconhecida: {Colors.YELLOW}{feedback}{Colors.RESET}')
+                print(f'{Colors.ERROR}✗ [{current_time()}]{Colors.RESET} Share {Colors.RED}REJEITADA{Colors.RESET} | '
+                      f'💰 Nonce: {Colors.YELLOW}{nonce}{Colors.RESET} | '
+                      f'⚡ Hashrate: {Colors.CYAN}{int(hashrate/1000)}{Colors.RESET} kH/s | '
+                      f'🎯 Dificuldade: {Colors.YELLOW}{difficulty}{Colors.RESET}')
                 break
     
     # ===== TRATAMENTO DE ERROS =====
     except KeyboardInterrupt:
-        print(f'\n{current_time()} : Mineração interrompida pelo usuário')
+        print(f'\n{Colors.WARNING}⏹️  [{current_time()}]{Colors.RESET} Mineração interrompida pelo usuário')
         if soc is not None:
             try:
                 soc.close()
@@ -195,18 +232,18 @@ while True:
         break  # Sai do loop principal
     
     except Exception as e:
-        print(f'{current_time()} : ✗ ERRO: {str(e)}')
+        print(f'{Colors.ERROR}❌ [{current_time()}]{Colors.RESET} ERRO: {str(e)}')
         
         # Fechamento seguro do socket
         if soc is not None:
             try:
-                print(f'{current_time()} : Fechando socket...')
+                print(f'{Colors.INFO}🔌 [{current_time()}]{Colors.RESET} Fechando socket...')
                 soc.close()
-                print(f'{current_time()} : Socket fechado com sucesso')
+                print(f'{Colors.SUCCESS}✓ [{current_time()}]{Colors.RESET} Socket fechado com sucesso')
             except Exception as close_error:
-                print(f'{current_time()} : Erro ao fechar socket: {close_error}')
+                print(f'{Colors.ERROR}❌ [{current_time()}]{Colors.RESET} Erro ao fechar socket: {close_error}')
         
         # Aguarda antes de reconectar
-        print(f'{current_time()} : Tentativa #{attempt} falhou. Reconectando em 5s...')
+        print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.RESET} Tentativa #{attempt} falhou. Reconectando em 5s...')
         time.sleep(5)
         # NÃO usa os.execl(), apenas continua o loop (mais limpo)
