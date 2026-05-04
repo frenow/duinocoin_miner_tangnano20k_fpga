@@ -21,13 +21,12 @@ parameter UART_FRE = 115200; // Taxa de bauds UART 115200
 parameter DIFFICULTY = 320000000; // Valor máximo de nonce para proof-of-work (320.000.000 iterações)
 
 // ========================================
-// ESTRATÉGIA QUAD SHA-1 CORE
+// ESTRATÉGIA PENTA SHA-1 CORE
 // ========================================
-// Implementação: 4 cores SHA-1 em paralelo para quadriplicar velocidade de mineração
-// - sha1_core_0: processa nonce_0 (nonce par: 0, 2, 4, 6, ...)
-// - sha1_core_1: processa nonce_1 (nonce ímpar: nonce_0 + 1)
-// - sha1_core_2: processa nonce_2 (nonce ímpar: nonce_0 + 2)
-// - sha1_core_3: processa nonce_3 (nonce ímpar: nonce_0 + 3)
+// Implementação: 5 cores SHA-1 em paralelo para 5X velocidade de mineração
+// - sha1_core_0: processa nonce_0
+// - sha1_core_1: processa nonce_1 (nonce_0 + 1)
+
 // - Ambos cores executam SHA-1 simultaneamente
 // - Incremento: nonce_0 += 4 a cada iteração
 // - Resultado: até 4x velocidade vs. implementação com 1 core
@@ -37,92 +36,123 @@ parameter DIFFICULTY = 320000000; // Valor máximo de nonce para proof-of-work (
 // Hash representa 20 bytes binários (160 bits) para comparação SHA-1
 reg [159:0] SHA1_EXPECTED;  // Hash SHA-1 esperado (160 bits = 20 bytes, decodificado de buffer[40..79])
 
-// Variável nonce QUAD-core: 
+// Variável nonce PENTA-core: 
 // - nonce_0: valor atual (nonce par) - SEQUENCIAL
 // - nonce_1: nonce_0 + 1 (nonce ímpar) - DERIVADO COMBINACIONALMENTE
 // Nota: 32 bits suportam até 4.294.967.295, mais que suficiente para 320.000.000 dificuldade
-reg [31:0] nonce_0;  // Nonce para sha1_core_0  (incrementado +4)
+reg [31:0] nonce_0;  // Nonce para sha1_core_0  (incrementado +5)
 wire [31:0] nonce_1;  // Nonce para sha1_core_1 (nonce_0 + 1) - wire combinacional
-wire [31:0] nonce_2;  // Nonce para sha1_core_2 (nonce_0 + 2) - wire combinacional
-wire [31:0] nonce_3;  // Nonce para sha1_core_3 (nonce_0 + 3) - wire combinacional
+wire [31:0] nonce_2;  
+wire [31:0] nonce_3;  
+wire [31:0] nonce_4;  
 
 assign nonce_1 = nonce_0 + 32'd1;  // Sempre 1 a mais que nonce_0
 assign nonce_2 = nonce_0 + 32'd2;  // Sempre 2 a mais que nonce_0
 assign nonce_3 = nonce_0 + 32'd3;  // Sempre 3 a mais que nonce_0
+assign nonce_4 = nonce_0 + 32'd4;  // Sempre 4 a mais que nonce_0
 
 // Conversão ASCII do nonce: comprimento variável (sem zeros à esquerda)
-// Máximo 9 bytes para valores até 999.999.999 (menos que 120.000.000)
+// Máximo 9 bytes para valores até 999.999.999 (menos que 1.000.000.000)
 // Exemplo: nonce=1        -> nonce_ascii="1"         (1 byte)
 //          nonce=12345    -> nonce_ascii="12345"     (5 bytes)
 //          nonce=120000000 -> nonce_ascii="120000000" (9 bytes)
 
 // ASCII conversion para nonce_0 (registrador - atualizado a cada ciclo)
 reg [71:0] nonce_ascii_0;  // Expandido para 72 bits (9 bytes = até 9 dígitos)
-reg [3:0] nonce_ascii_len_0;  // Aumentado para 4 bits (suporta até 15 dígitos, usamos até 9)
+wire [3:0] nonce_ascii_len_0;  // Aumentado para 4 bits (suporta até 15 dígitos, usamos até 9)
 
 // ASCII conversion para nonce_1 (registrador - atualizado a cada ciclo, derivado de nonce_0 + 1)
 // Nota: Mudado de wire para reg porque recebe atribuições em always @(*)
 reg [71:0] nonce_ascii_1;  // Expandido para 72 bits (9 bytes = até 9 dígitos)
-reg [3:0] nonce_ascii_len_1;  // Aumentado para 4 bits (suporta até 15 dígitos, usamos até 9)
+wire [3:0] nonce_ascii_len_1;  // Aumentado para 4 bits (suporta até 15 dígitos, usamos até 9)
 
 reg [71:0] nonce_ascii_2;  
-reg [3:0] nonce_ascii_len_2;  
+wire [3:0] nonce_ascii_len_2;  
 
 reg [71:0] nonce_ascii_3;  
-reg [3:0] nonce_ascii_len_3;  
+wire [3:0] nonce_ascii_len_3;
 
 reg [71:0] nonce_ascii_4;  
-reg [3:0] nonce_ascii_len_4;  
+wire [3:0] nonce_ascii_len_4;
 
-// Lógica combinacional de extração de dígitos: dígitos decimais derivados do valor do nonce
+// ========================================================================
+// BCD Converter: converte nonce para 9 dígitos
+// ========================================================================
+wire [3:0] digit9_0, digit8_0, digit7_0, digit6_0, digit5_0, digit4_0, digit3_0, digit2_0, digit1_0;
+wire [3:0] digit9_1, digit8_1, digit7_1, digit6_1, digit5_1, digit4_1, digit3_1, digit2_1, digit1_1;
+wire [3:0] digit9_2, digit8_2, digit7_2, digit6_2, digit5_2, digit4_2, digit3_2, digit2_2, digit1_2;
+wire [3:0] digit9_3, digit8_3, digit7_3, digit6_3, digit5_3, digit4_3, digit3_3, digit2_3, digit1_3;
+wire [3:0] digit9_4, digit8_4, digit7_4, digit6_4, digit5_4, digit4_4, digit3_4, digit2_4, digit1_4;
 
-// ========== DÍGITOS PARA NONCE_0 ==========
-// Suporta até 999.999.999 (9 dígitos, 10^8)
-wire [31:0] digit9_0 = (nonce_0 / 32'd100000000) % 32'd10;  // 10^8
-wire [31:0] digit8_0 = (nonce_0 / 32'd10000000) % 32'd10;   // 10^7
-wire [31:0] digit7_0 = (nonce_0 / 32'd1000000) % 32'd10;    // 10^6
-wire [31:0] digit6_0 = (nonce_0 / 32'd100000) % 32'd10;     // 10^5
-wire [31:0] digit5_0 = (nonce_0 / 32'd10000) % 32'd10;      // 10^4
-wire [31:0] digit4_0 = (nonce_0 / 32'd1000) % 32'd10;       // 10^3
-wire [31:0] digit3_0 = (nonce_0 / 32'd100) % 32'd10;        // 10^2
-wire [31:0] digit2_0 = (nonce_0 / 32'd10) % 32'd10;         // 10^1
-wire [31:0] digit1_0 = nonce_0 % 32'd10;                    // 10^0
+nonce_bcd_simple bcd_inst_0 (
+    .nonce(nonce_0),
+    .digit9(digit9_0),
+    .digit8(digit8_0),
+    .digit7(digit7_0),
+    .digit6(digit6_0),
+    .digit5(digit5_0),
+    .digit4(digit4_0),
+    .digit3(digit3_0),
+    .digit2(digit2_0),
+    .digit1(digit1_0),
+    .digit_count(nonce_ascii_len_0)
+);
 
-// ========== DÍGITOS PARA NONCE_1 ==========
-// Suporta até 999.999.999 (9 dígitos, 10^8)
-wire [31:0] digit9_1 = (nonce_1 / 32'd100000000) % 32'd10;  // 10^8
-wire [31:0] digit8_1 = (nonce_1 / 32'd10000000) % 32'd10;   // 10^7
-wire [31:0] digit7_1 = (nonce_1 / 32'd1000000) % 32'd10;    // 10^6
-wire [31:0] digit6_1 = (nonce_1 / 32'd100000) % 32'd10;     // 10^5
-wire [31:0] digit5_1 = (nonce_1 / 32'd10000) % 32'd10;      // 10^4
-wire [31:0] digit4_1 = (nonce_1 / 32'd1000) % 32'd10;       // 10^3
-wire [31:0] digit3_1 = (nonce_1 / 32'd100) % 32'd10;        // 10^2
-wire [31:0] digit2_1 = (nonce_1 / 32'd10) % 32'd10;         // 10^1
-wire [31:0] digit1_1 = nonce_1 % 32'd10;                    // 10^0
+nonce_bcd_simple bcd_inst_1 (
+    .nonce(nonce_1),
+    .digit9(digit9_1),
+    .digit8(digit8_1),
+    .digit7(digit7_1),
+    .digit6(digit6_1),
+    .digit5(digit5_1),
+    .digit4(digit4_1),
+    .digit3(digit3_1),
+    .digit2(digit2_1),
+    .digit1(digit1_1),
+    .digit_count(nonce_ascii_len_1)
+);
 
-// ========== DÍGITOS PARA NONCE_2 ==========
-// Suporta até 999.999.999 (9 dígitos, 10^8)
-wire [31:0] digit9_2 = (nonce_2 / 32'd100000000) % 32'd10;  // 10^8
-wire [31:0] digit8_2 = (nonce_2 / 32'd10000000) % 32'd10;   // 10^7
-wire [31:0] digit7_2 = (nonce_2 / 32'd1000000) % 32'd10;    // 10^6
-wire [31:0] digit6_2 = (nonce_2 / 32'd100000) % 32'd10;     // 10^5
-wire [31:0] digit5_2 = (nonce_2 / 32'd10000) % 32'd10;      // 10^4
-wire [31:0] digit4_2 = (nonce_2 / 32'd1000) % 32'd10;       // 10^3
-wire [31:0] digit3_2 = (nonce_2 / 32'd100) % 32'd10;        // 10^2
-wire [31:0] digit2_2 = (nonce_2 / 32'd10) % 32'd10;         // 10^1
-wire [31:0] digit1_2 = nonce_2 % 32'd10;                    // 10^0
+nonce_bcd_simple bcd_inst_2 (
+    .nonce(nonce_2),
+    .digit9(digit9_2),
+    .digit8(digit8_2),
+    .digit7(digit7_2),
+    .digit6(digit6_2),
+    .digit5(digit5_2),
+    .digit4(digit4_2),
+    .digit3(digit3_2),
+    .digit2(digit2_2),
+    .digit1(digit1_2),
+    .digit_count(nonce_ascii_len_2)
+);
 
-// ========== DÍGITOS PARA NONCE_3 ==========
-// Suporta até 999.999.999 (9 dígitos, 10^8)
-wire [31:0] digit9_3 = (nonce_3 / 32'd100000000) % 32'd10;  // 10^8
-wire [31:0] digit8_3 = (nonce_3 / 32'd10000000) % 32'd10;   // 10^7
-wire [31:0] digit7_3 = (nonce_3 / 32'd1000000) % 32'd10;    // 10^6
-wire [31:0] digit6_3 = (nonce_3 / 32'd100000) % 32'd10;     // 10^5
-wire [31:0] digit5_3 = (nonce_3 / 32'd10000) % 32'd10;      // 10^4
-wire [31:0] digit4_3 = (nonce_3 / 32'd1000) % 32'd10;       // 10^3
-wire [31:0] digit3_3 = (nonce_3 / 32'd100) % 32'd10;        // 10^2
-wire [31:0] digit2_3 = (nonce_3 / 32'd10) % 32'd10;         // 10^1
-wire [31:0] digit1_3 = nonce_3 % 32'd10;                    // 10^0
+nonce_bcd_simple bcd_inst_3 (
+    .nonce(nonce_3),
+    .digit9(digit9_3),
+    .digit8(digit8_3),
+    .digit7(digit7_3),
+    .digit6(digit6_3),
+    .digit5(digit5_3),
+    .digit4(digit4_3),
+    .digit3(digit3_3),
+    .digit2(digit2_3),
+    .digit1(digit1_3),
+    .digit_count(nonce_ascii_len_3)
+);
+
+nonce_bcd_simple bcd_inst_4 (
+    .nonce(nonce_4),
+    .digit9(digit9_4),
+    .digit8(digit8_4),
+    .digit7(digit7_4),
+    .digit6(digit6_4),
+    .digit5(digit5_4),
+    .digit4(digit4_4),
+    .digit3(digit3_4),
+    .digit2(digit2_4),
+    .digit1(digit1_4),
+    .digit_count(nonce_ascii_len_4)
+);
 
 // Bloco de mensagem: bloco de entrada de 512 bits com preenchimento (padrão RFC 3174 SHA-1)
 // Estrutura dinâmica:
@@ -130,801 +160,213 @@ wire [31:0] digit1_3 = nonce_3 % 32'd10;                    // 10^0
 //   Bytes 40+:   Nonce ASCII (1-9 bytes, comprimento variável, sem zeros à esquerda, até 120M)
 //   Byte 47+:    0x80 (marcador de preenchimento) + bytes zero + comprimento_mensagem_bits (64-bit big-endian)
 
-// ========== MESSAGE_BLOCK_0 para sha1_core_0 com nonce_0 (par) ==========
+// ========== MESSAGE_BLOCK_0 para sha1_core_0 com nonce_0 ==========
 reg [511:0] MESSAGE_BLOCK_0;
-
-// ========== MESSAGE_BLOCK_1 para sha1_core_1 com nonce_1 (ímpar) ==========
 reg [511:0] MESSAGE_BLOCK_1;
-
-// ========== MESSAGE_BLOCK_2 para sha1_core_2 com nonce_2 ==========
 reg [511:0] MESSAGE_BLOCK_2;
-
-// ========== MESSAGE_BLOCK_3 para sha1_core_3 com nonce_3 ==========
 reg [511:0] MESSAGE_BLOCK_3;
+reg [511:0] MESSAGE_BLOCK_4;
+reg [511:0] MESSAGE_BLOCK_5;
 
-// Lógica combinacional: constrói dinamicamente MESSAGE_BLOCK_0 e MESSAGE_BLOCK_1
-// MESSAGE_BLOCK_0: usa nonce_0 (par) e nonce_ascii_0
-// MESSAGE_BLOCK_1: usa nonce_1 (ímpar) e nonce_ascii_1
+// Calcular comprimento da mensagem em bits: (40 + nonce_ascii_len) * 8
+wire [15:0] msg_length_bits_0 = 16'd320 + (nonce_ascii_len_0 << 3);  // 320 = 40*8, shift left 3 = multiply by 8
+wire [15:0] msg_length_bits_1 = 16'd320 + (nonce_ascii_len_1 << 3);  
+wire [15:0] msg_length_bits_2 = 16'd320 + (nonce_ascii_len_2 << 3);  
+wire [15:0] msg_length_bits_3 = 16'd320 + (nonce_ascii_len_3 << 3);  
+wire [15:0] msg_length_bits_4 = 16'd320 + (nonce_ascii_len_4 << 3);  
+
+// Lógica combinacional: constrói dinamicamente MESSAGE_BLOCK_*
 always @(*) begin
-    // ========================================
-    // PASSO 1: Computar ASCII para nonce_0 (par)
-    // ========================================
-    if (nonce_0 == 0) begin
-        nonce_ascii_len_0 = 4'd1;
-        nonce_ascii_0 = {64'd0, 8'h30};  // "0"
-    end else if (nonce_0 < 10) begin
-        nonce_ascii_len_0 = 4'd1;
-        nonce_ascii_0 = {64'd0, 8'h30 + digit1_0[7:0]};  // "1" até "9"
-    end else if (nonce_0 < 100) begin
-        nonce_ascii_len_0 = 4'd2;
-        nonce_ascii_0 = {56'd0, 8'h30 + digit2_0[7:0], 8'h30 + digit1_0[7:0]};  // "10" até "99"
-    end else if (nonce_0 < 1000) begin
-        nonce_ascii_len_0 = 4'd3;
-        nonce_ascii_0 = {48'd0, 8'h30 + digit3_0[7:0], 8'h30 + digit2_0[7:0], 8'h30 + digit1_0[7:0]};  // "100" até "999"
-    end else if (nonce_0 < 10000) begin
-        nonce_ascii_len_0 = 4'd4;
-        nonce_ascii_0 = {40'd0, 8'h30 + digit4_0[7:0], 8'h30 + digit3_0[7:0], 8'h30 + digit2_0[7:0], 8'h30 + digit1_0[7:0]};  // "1000" até "9999"
-    end else if (nonce_0 < 100000) begin
-        nonce_ascii_len_0 = 4'd5;
-        nonce_ascii_0 = {32'd0, 8'h30 + digit5_0[7:0], 8'h30 + digit4_0[7:0], 8'h30 + digit3_0[7:0], 8'h30 + digit2_0[7:0], 8'h30 + digit1_0[7:0]};   // "10000" até "99999"
-    end else if (nonce_0 < 1000000) begin
-        nonce_ascii_len_0 = 4'd6;
-        nonce_ascii_0 = {24'd0, 8'h30 + digit6_0[7:0], 8'h30 + digit5_0[7:0], 8'h30 + digit4_0[7:0], 8'h30 + digit3_0[7:0], 8'h30 + digit2_0[7:0], 8'h30 + digit1_0[7:0]};    // "100000" até "999999"
-    end else if (nonce_0 < 10000000) begin
-        nonce_ascii_len_0 = 4'd7;
-        nonce_ascii_0 = {16'd0, 8'h30 + digit7_0[7:0], 8'h30 + digit6_0[7:0], 8'h30 + digit5_0[7:0], 8'h30 + digit4_0[7:0], 8'h30 + digit3_0[7:0], 8'h30 + digit2_0[7:0], 8'h30 + digit1_0[7:0]};   // "1000000" até "9999999"
-    end else if (nonce_0 < 100000000) begin
-        nonce_ascii_len_0 = 4'd8;
-        nonce_ascii_0 = {8'd0, 8'h30 + digit8_0[7:0], 8'h30 + digit7_0[7:0], 8'h30 + digit6_0[7:0], 8'h30 + digit5_0[7:0], 8'h30 + digit4_0[7:0], 8'h30 + digit3_0[7:0], 8'h30 + digit2_0[7:0], 8'h30 + digit1_0[7:0]};   // "10000000" até "99999999"
-    end else begin
-        nonce_ascii_len_0 = 4'd9;
-        nonce_ascii_0 = {8'h30 + digit9_0[7:0], 8'h30 + digit8_0[7:0], 8'h30 + digit7_0[7:0], 8'h30 + digit6_0[7:0], 8'h30 + digit5_0[7:0], 8'h30 + digit4_0[7:0], 8'h30 + digit3_0[7:0], 8'h30 + digit2_0[7:0], 8'h30 + digit1_0[7:0]};   // "100000000" até "999999999"
-    end
-    
-    // ========================================
-    // PASSO 2: Construir MESSAGE_BLOCK_0 com nonce_0
-    // Total de dados: 40 (mensagem) + nonce_ascii_len_0 bytes
-    // ========================================
+    // Construir nonce_ascii baseado na contagem de dígitos
+    // Converter BCD puro (0-9) para ASCII (0x30-0x39)
     case (nonce_ascii_len_0)
-        3'd1: begin
-            // 40 + 1 = 41 bytes de dados
-            // Comprimento da mensagem: 41 * 8 = 328 bits = 0x0148
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[7:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h48
-            };
-        end
-        3'd2: begin
-            // 40 + 2 = 42 bytes de dados
-            // Comprimento da mensagem: 42 * 8 = 336 bits = 0x0150
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[15:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00,
-                8'h01, 8'h50
-            };
-        end
-        3'd3: begin
-            // 40 + 3 = 43 bytes de dados
-            // Comprimento da mensagem: 43 * 8 = 344 bits = 0x0158
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[23:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00,
-                8'h01, 8'h58
-            };
-        end
-        3'd4: begin
-            // 40 + 4 = 44 bytes de dados
-            // Comprimento da mensagem: 44 * 8 = 352 bits = 0x0160
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[31:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00,
-                8'h01, 8'h60
-            };
-        end
-        3'd5: begin
-            // 40 + 5 = 45 bytes de dados
-            // Comprimento da mensagem: 45 * 8 = 360 bits = 0x0168
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[39:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h68
-            };
-        end
-        3'd6: begin
-            // 40 + 6 = 46 bytes de dados
-            // Comprimento da mensagem: 46 * 8 = 368 bits = 0x0170
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[47:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h70
-            };
-        end
-        3'd7: begin
-            // 40 + 7 = 47 bytes de dados
-            // Comprimento da mensagem: 47 * 8 = 376 bits = 0x0178
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[55:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h78
-            };
-        end
-        4'd8: begin  // 3'd8
-            // 40 + 8 = 48 bytes de dados
-            // Comprimento da mensagem: 48 * 8 = 384 bits = 0x0180
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[63:0],  // Todos os 8 bytes
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h80
-            };
-        end
-        4'd9: begin  // 3'd9
-            // 40 + 9 = 49 bytes de dados
-            // Comprimento da mensagem: 49 * 8 = 392 bits = 0x0188
-            MESSAGE_BLOCK_0 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_0[71:0],  // Todos os 9 bytes (72 bits = 9 bytes)
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00,
-                8'h01, 8'h88
-            };
-        end
-        default: begin
-            // Fallback para valores não cobertos (segurança: evita latch)
-            MESSAGE_BLOCK_0 = 512'd0;
-        end
+        4'd1: nonce_ascii_0 = {48'd0, 8'h30 + digit1_0};
+        4'd2: nonce_ascii_0 = {40'd0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+        4'd3: nonce_ascii_0 = {32'd0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+        4'd4: nonce_ascii_0 = {24'd0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+        4'd5: nonce_ascii_0 = {16'd0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+        4'd6: nonce_ascii_0 = {8'd0, 8'h30  + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+        4'd7: nonce_ascii_0 = {8'h30        + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+        4'd8: nonce_ascii_0 = {8'h30 + digit8_0, 8'h30 + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+        4'd9: nonce_ascii_0 = {8'h30 + digit9_0, 8'h30 + digit8_0, 8'h30 + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+        default: nonce_ascii_0 = 72'd0;
     endcase
     
-    // ========================================
-    // PASSO 3: Computar ASCII para nonce_1 (nonce_0 + 1) - COMBINACIONAL
-    // ========================================
-    // Nota: nonce_1 = nonce_0 + 1, então seus dígitos são derivados de digit*_1
-    if (nonce_1 == 0) begin
-        nonce_ascii_len_1 = 4'd1;
-        nonce_ascii_1 = {64'd0, 8'h30};  // "0"
-    end else if (nonce_1 < 10) begin
-        nonce_ascii_len_1 = 4'd1;
-        nonce_ascii_1 = {64'd0, 8'h30 + digit1_1[7:0]};  // "1" até "9"
-    end else if (nonce_1 < 100) begin
-        nonce_ascii_len_1 = 4'd2;
-        nonce_ascii_1 = {56'd0, 8'h30 + digit2_1[7:0], 8'h30 + digit1_1[7:0]};  // "10" até "99"
-    end else if (nonce_1 < 1000) begin
-        nonce_ascii_len_1 = 4'd3;
-        nonce_ascii_1 = {48'd0, 8'h30 + digit3_1[7:0], 8'h30 + digit2_1[7:0], 8'h30 + digit1_1[7:0]};  // "100" até "999"
-    end else if (nonce_1 < 10000) begin
-        nonce_ascii_len_1 = 4'd4;
-        nonce_ascii_1 = {40'd0, 8'h30 + digit4_1[7:0], 8'h30 + digit3_1[7:0], 8'h30 + digit2_1[7:0], 8'h30 + digit1_1[7:0]};  // "1000" até "9999"
-    end else if (nonce_1 < 100000) begin
-        nonce_ascii_len_1 = 4'd5;
-        nonce_ascii_1 = {32'd0, 8'h30 + digit5_1[7:0], 8'h30 + digit4_1[7:0], 8'h30 + digit3_1[7:0], 8'h30 + digit2_1[7:0], 8'h30 + digit1_1[7:0]};   // "10000" até "99999"
-    end else if (nonce_1 < 1000000) begin
-        nonce_ascii_len_1 = 4'd6;
-        nonce_ascii_1 = {24'd0, 8'h30 + digit6_1[7:0], 8'h30 + digit5_1[7:0], 8'h30 + digit4_1[7:0], 8'h30 + digit3_1[7:0], 8'h30 + digit2_1[7:0], 8'h30 + digit1_1[7:0]};    // "100000" até "999999"
-    end else if (nonce_1 < 10000000) begin
-        nonce_ascii_len_1 = 4'd7;
-        nonce_ascii_1 = {16'd0, 8'h30 + digit7_1[7:0], 8'h30 + digit6_1[7:0], 8'h30 + digit5_1[7:0], 8'h30 + digit4_1[7:0], 8'h30 + digit3_1[7:0], 8'h30 + digit2_1[7:0], 8'h30 + digit1_1[7:0]};   // "1000000" até "9999999"
-    end else if (nonce_1 < 100000000) begin
-        nonce_ascii_len_1 = 4'd8;
-        nonce_ascii_1 = {8'd0, 8'h30 + digit8_1[7:0], 8'h30 + digit7_1[7:0], 8'h30 + digit6_1[7:0], 8'h30 + digit5_1[7:0], 8'h30 + digit4_1[7:0], 8'h30 + digit3_1[7:0], 8'h30 + digit2_1[7:0], 8'h30 + digit1_1[7:0]};   // "10000000" até "99999999"
-    end else begin
-        nonce_ascii_len_1 = 4'd9;
-        nonce_ascii_1 = {8'h30 + digit9_1[7:0], 8'h30 + digit8_1[7:0], 8'h30 + digit7_1[7:0], 8'h30 + digit6_1[7:0], 8'h30 + digit5_1[7:0], 8'h30 + digit4_1[7:0], 8'h30 + digit3_1[7:0], 8'h30 + digit2_1[7:0], 8'h30 + digit1_1[7:0]};   // "100000000" até "999999999"
-    end
-    
-    // ========================================
-    // PASSO 4: Construir MESSAGE_BLOCK_1 com nonce_1
-    // Total de dados: 40 (mensagem) + nonce_ascii_len_1 bytes
-    // ========================================
     case (nonce_ascii_len_1)
-        3'd1: begin
-            // 40 + 1 = 41 bytes de dados
-            // Comprimento da mensagem: 41 * 8 = 328 bits = 0x0148
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[7:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h48
-            };
-        end
-        3'd2: begin
-            // 40 + 2 = 42 bytes de dados
-            // Comprimento da mensagem: 42 * 8 = 336 bits = 0x0150
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[15:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00,
-                8'h01, 8'h50
-            };
-        end
-        3'd3: begin
-            // 40 + 3 = 43 bytes de dados
-            // Comprimento da mensagem: 43 * 8 = 344 bits = 0x0158
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[23:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00,
-                8'h01, 8'h58
-            };
-        end
-        3'd4: begin
-            // 40 + 4 = 44 bytes de dados
-            // Comprimento da mensagem: 44 * 8 = 352 bits = 0x0160
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[31:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00,
-                8'h01, 8'h60
-            };
-        end
-        3'd5: begin
-            // 40 + 5 = 45 bytes de dados
-            // Comprimento da mensagem: 45 * 8 = 360 bits = 0x0168
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[39:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h68
-            };
-        end
-        3'd6: begin
-            // 40 + 6 = 46 bytes de dados
-            // Comprimento da mensagem: 46 * 8 = 368 bits = 0x0170
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[47:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h70
-            };
-        end
-        3'd7: begin
-            // 40 + 7 = 47 bytes de dados
-            // Comprimento da mensagem: 47 * 8 = 376 bits = 0x0178
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[55:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h78
-            };
-        end
-        4'd8: begin
-            // 40 + 8 = 48 bytes de dados
-            // Comprimento da mensagem: 48 * 8 = 384 bits = 0x0180
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[63:0],  // Todos os 8 bytes
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h80
-            };
-        end
-        4'd9: begin
-            // 40 + 9 = 49 bytes de dados
-            // Comprimento da mensagem: 49 * 8 = 392 bits = 0x0188
-            MESSAGE_BLOCK_1 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_1[71:0],  // Todos os 9 bytes (72 bits = 9 bytes)
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00,
-                8'h01, 8'h88
-            };
-        end
-        default: begin
-            // Fallback para valores não cobertos (segurança: evita latch)
-            MESSAGE_BLOCK_1 = 512'd0;
-        end
+        4'd1: nonce_ascii_1 = {48'd0, 8'h30 + digit1_1};
+        4'd2: nonce_ascii_1 = {40'd0, 8'h30 + digit2_1, 8'h30 + digit1_1};
+        4'd3: nonce_ascii_1 = {32'd0, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+        4'd4: nonce_ascii_1 = {24'd0, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+        4'd5: nonce_ascii_1 = {16'd0, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+        4'd6: nonce_ascii_1 = {8'd0, 8'h30  + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+        4'd7: nonce_ascii_1 = {8'h30        + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+        4'd8: nonce_ascii_1 = {8'h30 + digit8_1, 8'h30 + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+        4'd9: nonce_ascii_1 = {8'h30 + digit9_1, 8'h30 + digit8_1, 8'h30 + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+        default: nonce_ascii_1 = 72'd0;
     endcase
-
-    // ========================================
-    // PASSO 5: Computar ASCII para nonce_2 (nonce_1 + 1) - COMBINACIONAL
-    // ========================================
-    // Nota: nonce_2 = nonce_1 + 1, então seus dígitos são derivados de digit*_2
-    if (nonce_2 == 0) begin
-        nonce_ascii_len_2 = 4'd1;
-        nonce_ascii_2 = {64'd0, 8'h30};  // "0"
-    end else if (nonce_2 < 10) begin
-        nonce_ascii_len_2 = 4'd1;
-        nonce_ascii_2 = {64'd0, 8'h30 + digit1_2[7:0]};  // "1" até "9"
-    end else if (nonce_2 < 100) begin
-        nonce_ascii_len_2 = 4'd2;
-        nonce_ascii_2 = {56'd0, 8'h30 + digit2_2[7:0], 8'h30 + digit1_2[7:0]};  // "10" até "99"
-    end else if (nonce_2 < 1000) begin
-        nonce_ascii_len_2 = 4'd3;
-        nonce_ascii_2 = {48'd0, 8'h30 + digit3_2[7:0], 8'h30 + digit2_2[7:0], 8'h30 + digit1_2[7:0]};  // "100" até "999"
-    end else if (nonce_2 < 10000) begin
-        nonce_ascii_len_2 = 4'd4;
-        nonce_ascii_2 = {40'd0, 8'h30 + digit4_2[7:0], 8'h30 + digit3_2[7:0], 8'h30 + digit2_2[7:0], 8'h30 + digit1_2[7:0]};  // "1000" até "9999"
-    end else if (nonce_2 < 100000) begin
-        nonce_ascii_len_2 = 4'd5;
-        nonce_ascii_2 = {32'd0, 8'h30 + digit5_2[7:0], 8'h30 + digit4_2[7:0], 8'h30 + digit3_2[7:0], 8'h30 + digit2_2[7:0], 8'h30 + digit1_2[7:0]};   // "10000" até "99999"
-    end else if (nonce_2 < 1000000) begin
-        nonce_ascii_len_2 = 4'd6;
-        nonce_ascii_2 = {24'd0, 8'h30 + digit6_2[7:0], 8'h30 + digit5_2[7:0], 8'h30 + digit4_2[7:0], 8'h30 + digit3_2[7:0], 8'h30 + digit2_2[7:0], 8'h30 + digit1_2[7:0]};    // "100000" até "999999"
-    end else if (nonce_2 < 10000000) begin
-        nonce_ascii_len_2 = 4'd7;
-        nonce_ascii_2 = {16'd0, 8'h30 + digit7_2[7:0], 8'h30 + digit6_2[7:0], 8'h30 + digit5_2[7:0], 8'h30 + digit4_2[7:0], 8'h30 + digit3_2[7:0], 8'h30 + digit2_2[7:0], 8'h30 + digit1_2[7:0]};   // "1000000" até "9999999"
-    end else if (nonce_2 < 100000000) begin
-        nonce_ascii_len_2 = 4'd8;
-        nonce_ascii_2 = {8'd0, 8'h30 + digit8_2[7:0], 8'h30 + digit7_2[7:0], 8'h30 + digit6_2[7:0], 8'h30 + digit5_2[7:0], 8'h30 + digit4_2[7:0], 8'h30 + digit3_2[7:0], 8'h30 + digit2_2[7:0], 8'h30 + digit1_2[7:0]};   // "10000000" até "99999999"
-    end else begin
-        nonce_ascii_len_2 = 4'd9;
-        nonce_ascii_2 = {8'h30 + digit9_2[7:0], 8'h30 + digit8_2[7:0], 8'h30 + digit7_2[7:0], 8'h30 + digit6_2[7:0], 8'h30 + digit5_2[7:0], 8'h30 + digit4_2[7:0], 8'h30 + digit3_2[7:0], 8'h30 + digit2_2[7:0], 8'h30 + digit1_2[7:0]};   // "100000000" até "999999999"
-    end
     
-    // ========================================
-    // PASSO 6: Construir MESSAGE_BLOCK_2 com nonce_2
-    // Total de dados: 40 (mensagem) + nonce_ascii_len_2 bytes
-    // ========================================
     case (nonce_ascii_len_2)
-        3'd1: begin
-            // 40 + 1 = 41 bytes de dados
-            // Comprimento da mensagem: 41 * 8 = 328 bits = 0x0148
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[7:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h48
-            };
-        end
-        3'd2: begin
-            // 40 + 2 = 42 bytes de dados
-            // Comprimento da mensagem: 42 * 8 = 336 bits = 0x0150
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[15:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00,
-                8'h01, 8'h50
-            };
-        end
-        3'd3: begin
-            // 40 + 3 = 43 bytes de dados
-            // Comprimento da mensagem: 43 * 8 = 344 bits = 0x0158
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[23:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00,
-                8'h01, 8'h58
-            };
-        end
-        3'd4: begin
-            // 40 + 4 = 44 bytes de dados
-            // Comprimento da mensagem: 44 * 8 = 352 bits = 0x0160
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[31:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00,
-                8'h01, 8'h60
-            };
-        end
-        3'd5: begin
-            // 40 + 5 = 45 bytes de dados
-            // Comprimento da mensagem: 45 * 8 = 360 bits = 0x0168
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[39:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h68
-            };
-        end
-        3'd6: begin
-            // 40 + 6 = 46 bytes de dados
-            // Comprimento da mensagem: 46 * 8 = 368 bits = 0x0170
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[47:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h70
-            };
-        end
-        3'd7: begin
-            // 40 + 7 = 47 bytes de dados
-            // Comprimento da mensagem: 47 * 8 = 376 bits = 0x0178
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[55:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h78
-            };
-        end
-        4'd8: begin
-            // 40 + 8 = 48 bytes de dados
-            // Comprimento da mensagem: 48 * 8 = 384 bits = 0x0180
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[63:0],  // Todos os 8 bytes
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h80
-            };
-        end
-        4'd9: begin
-            // 40 + 9 = 49 bytes de dados
-            // Comprimento da mensagem: 49 * 8 = 392 bits = 0x0188
-            MESSAGE_BLOCK_2 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_2[71:0],  // Todos os 9 bytes (72 bits = 9 bytes)
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00,
-                8'h01, 8'h88
-            };
-        end
-        default: begin
-            // Fallback para valores não cobertos (segurança: evita latch)
-            MESSAGE_BLOCK_2 = 512'd0;
-        end
+        4'd1: nonce_ascii_2 = {48'd0, 8'h30 + digit1_2};
+        4'd2: nonce_ascii_2 = {40'd0, 8'h30 + digit2_2, 8'h30 + digit1_2};
+        4'd3: nonce_ascii_2 = {32'd0, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+        4'd4: nonce_ascii_2 = {24'd0, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+        4'd5: nonce_ascii_2 = {16'd0, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+        4'd6: nonce_ascii_2 = {8'd0, 8'h30  + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+        4'd7: nonce_ascii_2 = {8'h30        + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+        4'd8: nonce_ascii_2 = {8'h30 + digit8_2, 8'h30 + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+        4'd9: nonce_ascii_2 = {8'h30 + digit9_2, 8'h30 + digit8_2, 8'h30 + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+        default: nonce_ascii_2 = 72'd0;
     endcase
-
-    // ========================================
-    // PASSO 7: Computar ASCII para nonce_3 (nonce_2 + 1) - COMBINACIONAL
-    // ========================================
-    // Nota: nonce_3 = nonce_2 + 1, então seus dígitos são derivados de digit*_3
-    if (nonce_3 == 0) begin
-        nonce_ascii_len_3 = 4'd1;
-        nonce_ascii_3 = {64'd0, 8'h30};  // "0"
-    end else if (nonce_3 < 10) begin
-        nonce_ascii_len_3 = 4'd1;
-        nonce_ascii_3 = {64'd0, 8'h30 + digit1_3[7:0]};  // "1" até "9"
-    end else if (nonce_3 < 100) begin
-        nonce_ascii_len_3 = 4'd2;
-        nonce_ascii_3 = {56'd0, 8'h30 + digit2_3[7:0], 8'h30 + digit1_3[7:0]};  // "10" até "99"
-    end else if (nonce_3 < 1000) begin
-        nonce_ascii_len_3 = 4'd3;
-        nonce_ascii_3 = {48'd0, 8'h30 + digit3_3[7:0], 8'h30 + digit2_3[7:0], 8'h30 + digit1_3[7:0]};  // "100" até "999"
-    end else if (nonce_3 < 10000) begin
-        nonce_ascii_len_3 = 4'd4;
-        nonce_ascii_3 = {40'd0, 8'h30 + digit4_3[7:0], 8'h30 + digit3_3[7:0], 8'h30 + digit2_3[7:0], 8'h30 + digit1_3[7:0]};  // "1000" até "9999"
-    end else if (nonce_3 < 100000) begin
-        nonce_ascii_len_3 = 4'd5;
-        nonce_ascii_3 = {32'd0, 8'h30 + digit5_3[7:0], 8'h30 + digit4_3[7:0], 8'h30 + digit3_3[7:0], 8'h30 + digit2_3[7:0], 8'h30 + digit1_3[7:0]};   // "10000" até "99999"
-    end else if (nonce_3 < 1000000) begin
-        nonce_ascii_len_3 = 4'd6;
-        nonce_ascii_3 = {24'd0, 8'h30 + digit6_3[7:0], 8'h30 + digit5_3[7:0], 8'h30 + digit4_3[7:0], 8'h30 + digit3_3[7:0], 8'h30 + digit2_3[7:0], 8'h30 + digit1_3[7:0]};    // "100000" até "999999"
-    end else if (nonce_3 < 10000000) begin
-        nonce_ascii_len_3 = 4'd7;
-        nonce_ascii_3 = {16'd0, 8'h30 + digit7_3[7:0], 8'h30 + digit6_3[7:0], 8'h30 + digit5_3[7:0], 8'h30 + digit4_3[7:0], 8'h30 + digit3_3[7:0], 8'h30 + digit2_3[7:0], 8'h30 + digit1_3[7:0]};   // "1000000" até "9999999"
-    end else if (nonce_3 < 100000000) begin
-        nonce_ascii_len_3 = 4'd8;
-        nonce_ascii_3 = {8'd0, 8'h30 + digit8_3[7:0], 8'h30 + digit7_3[7:0], 8'h30 + digit6_3[7:0], 8'h30 + digit5_3[7:0], 8'h30 + digit4_3[7:0], 8'h30 + digit3_3[7:0], 8'h30 + digit2_3[7:0], 8'h30 + digit1_3[7:0]};   // "10000000" até "99999999"
-    end else begin
-        nonce_ascii_len_3 = 4'd9;
-        nonce_ascii_3 = {8'h30 + digit9_3[7:0], 8'h30 + digit8_3[7:0], 8'h30 + digit7_3[7:0], 8'h30 + digit6_3[7:0], 8'h30 + digit5_3[7:0], 8'h30 + digit4_3[7:0], 8'h30 + digit3_3[7:0], 8'h30 + digit2_3[7:0], 8'h30 + digit1_3[7:0]};   // "100000000" até "999999999"
-    end
     
-    // ========================================
-    // PASSO 4: Construir MESSAGE_BLOCK_3 com nonce_3
-    // Total de dados: 40 (mensagem) + nonce_ascii_len_3 bytes
-    // ========================================
     case (nonce_ascii_len_3)
-        3'd1: begin
-            // 40 + 1 = 41 bytes de dados
-            // Comprimento da mensagem: 41 * 8 = 328 bits = 0x0148
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[7:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h48
-            };
-        end
-        3'd2: begin
-            // 40 + 2 = 42 bytes de dados
-            // Comprimento da mensagem: 42 * 8 = 336 bits = 0x0150
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[15:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00,
-                8'h01, 8'h50
-            };
-        end
-        3'd3: begin
-            // 40 + 3 = 43 bytes de dados
-            // Comprimento da mensagem: 43 * 8 = 344 bits = 0x0158
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[23:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00,
-                8'h01, 8'h58
-            };
-        end
-        3'd4: begin
-            // 40 + 4 = 44 bytes de dados
-            // Comprimento da mensagem: 44 * 8 = 352 bits = 0x0160
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[31:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00,
-                8'h01, 8'h60
-            };
-        end
-        3'd5: begin
-            // 40 + 5 = 45 bytes de dados
-            // Comprimento da mensagem: 45 * 8 = 360 bits = 0x0168
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[39:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h68
-            };
-        end
-        3'd6: begin
-            // 40 + 6 = 46 bytes de dados
-            // Comprimento da mensagem: 46 * 8 = 368 bits = 0x0170
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[47:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h70
-            };
-        end
-        3'd7: begin
-            // 40 + 7 = 47 bytes de dados
-            // Comprimento da mensagem: 47 * 8 = 376 bits = 0x0178
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[55:0],
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h78
-            };
-        end
-        4'd8: begin
-            // 40 + 8 = 48 bytes de dados
-            // Comprimento da mensagem: 48 * 8 = 384 bits = 0x0180
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[63:0],  // Todos os 8 bytes
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h01, 8'h80
-            };
-        end
-        4'd9: begin
-            // 40 + 9 = 49 bytes de dados
-            // Comprimento da mensagem: 49 * 8 = 392 bits = 0x0188
-            MESSAGE_BLOCK_3 = {
-                buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-                buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
-                buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
-                buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
-                nonce_ascii_3[71:0],  // Todos os 9 bytes (72 bits = 9 bytes)
-                8'h80,
-                8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00,
-                8'h00, 8'h00, 8'h00,
-                8'h01, 8'h88
-            };
-        end
-        default: begin
-            // Fallback para valores não cobertos (segurança: evita latch)
-            MESSAGE_BLOCK_3 = 512'd0;
-        end
+        4'd1: nonce_ascii_3 = {48'd0, 8'h30 + digit1_3};
+        4'd2: nonce_ascii_3 = {40'd0, 8'h30 + digit2_3, 8'h30 + digit1_3};
+        4'd3: nonce_ascii_3 = {32'd0, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+        4'd4: nonce_ascii_3 = {24'd0, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+        4'd5: nonce_ascii_3 = {16'd0, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+        4'd6: nonce_ascii_3 = {8'd0, 8'h30  + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+        4'd7: nonce_ascii_3 = {8'h30        + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+        4'd8: nonce_ascii_3 = {8'h30 + digit8_3, 8'h30 + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+        4'd9: nonce_ascii_3 = {8'h30 + digit9_3, 8'h30 + digit8_3, 8'h30 + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+        default: nonce_ascii_3 = 72'd0;
     endcase
 
+    case (nonce_ascii_len_4)
+        4'd1: nonce_ascii_4 = {48'd0, 8'h30 + digit1_4};
+        4'd2: nonce_ascii_4 = {40'd0, 8'h30 + digit2_4, 8'h30 + digit1_4};
+        4'd3: nonce_ascii_4 = {32'd0, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+        4'd4: nonce_ascii_4 = {24'd0, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+        4'd5: nonce_ascii_4 = {16'd0, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+        4'd6: nonce_ascii_4 = {8'd0, 8'h30  + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+        4'd7: nonce_ascii_4 = {8'h30        + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+        4'd8: nonce_ascii_4 = {8'h30 + digit8_4, 8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+        4'd9: nonce_ascii_4 = {8'h30 + digit9_4, 8'h30 + digit8_4, 8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+        default: nonce_ascii_4 = 72'd0;
+    endcase
+    
+    // ========================================================================
+    // Estrutura dinâmica: buffer[40] + nonce_ascii[variável] + 0x80 + padding + comprimento
+    // 
+    // Comprimento total = 40 + nonce_ascii_len bytes
+    // Comprimento em bits = (40 + nonce_ascii_len) * 8
+    // Tabela:
+    //   nonce_len=1: msg_bits = 328 (0x0148), padding = 20 bytes
+    //   nonce_len=2: msg_bits = 336 (0x0150), padding = 19 bytes
+    //   nonce_len=3: msg_bits = 344 (0x0158), padding = 18 bytes
+    //   nonce_len=4: msg_bits = 352 (0x0160), padding = 17 bytes
+    //   nonce_len=5: msg_bits = 360 (0x0168), padding = 16 bytes
+    //   nonce_len=6: msg_bits = 368 (0x0170), padding = 15 bytes
+    //   nonce_len=7: msg_bits = 376 (0x0178), padding = 14 bytes
+    //   nonce_len=8: msg_bits = 384 (0x0180), padding = 13 bytes
+    //   nonce_len=9: msg_bits = 392 (0x0188), padding = 12 bytes
+    // ========================================================================
+    
+    // Bloco de mensagem = 512 bits total
+    // Posição do padding dinâmica: buffer[40] + nonce_ascii + 0x80 + zeros + comprimento(2 bytes)
+    MESSAGE_BLOCK_0 = {
+        // Bytes 0-39: mensagem do buffer UART
+        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
+        buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
+        buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
+        buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
+        buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
+        
+         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
+         (nonce_ascii_len_0 == 4'd1) ? {nonce_ascii_0[7:0],  8'h80, 160'h00, msg_length_bits_0} :
+         (nonce_ascii_len_0 == 4'd2) ? {nonce_ascii_0[15:0], 8'h80, 152'h00, msg_length_bits_0} :
+         (nonce_ascii_len_0 == 4'd3) ? {nonce_ascii_0[23:0], 8'h80, 144'h00, msg_length_bits_0} :
+         (nonce_ascii_len_0 == 4'd4) ? {nonce_ascii_0[31:0], 8'h80, 136'h00, msg_length_bits_0} :
+         (nonce_ascii_len_0 == 4'd5) ? {nonce_ascii_0[39:0], 8'h80, 128'h00, msg_length_bits_0} :
+         (nonce_ascii_len_0 == 4'd6) ? {nonce_ascii_0[47:0], 8'h80, 120'h00, msg_length_bits_0} :
+         (nonce_ascii_len_0 == 4'd7) ? {nonce_ascii_0[55:0], 8'h80, 112'h00, msg_length_bits_0} :
+         (nonce_ascii_len_0 == 4'd8) ? {nonce_ascii_0[63:0], 8'h80, 104'h00, msg_length_bits_0} :
+         /* 4'd9 */                    {nonce_ascii_0[71:0], 8'h80, 96'h00 , msg_length_bits_0}
+    };
+    
+    MESSAGE_BLOCK_1 = {
+        // Bytes 0-39: mensagem do buffer UART
+        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
+        buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
+        buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
+        buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
+        buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
+        
+         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
+         (nonce_ascii_len_1 == 4'd1) ? {nonce_ascii_1[7:0],  8'h80, 160'h00, msg_length_bits_1} :
+         (nonce_ascii_len_1 == 4'd2) ? {nonce_ascii_1[15:0], 8'h80, 152'h00, msg_length_bits_1} :
+         (nonce_ascii_len_1 == 4'd3) ? {nonce_ascii_1[23:0], 8'h80, 144'h00, msg_length_bits_1} :
+         (nonce_ascii_len_1 == 4'd4) ? {nonce_ascii_1[31:0], 8'h80, 136'h00, msg_length_bits_1} :
+         (nonce_ascii_len_1 == 4'd5) ? {nonce_ascii_1[39:0], 8'h80, 128'h00, msg_length_bits_1} :
+         (nonce_ascii_len_1 == 4'd6) ? {nonce_ascii_1[47:0], 8'h80, 120'h00, msg_length_bits_1} :
+         (nonce_ascii_len_1 == 4'd7) ? {nonce_ascii_1[55:0], 8'h80, 112'h00, msg_length_bits_1} :
+         (nonce_ascii_len_1 == 4'd8) ? {nonce_ascii_1[63:0], 8'h80, 104'h00, msg_length_bits_1} :
+         /* 4'd9 */                    {nonce_ascii_1[71:0], 8'h80, 96'h00,  msg_length_bits_1}
+    };
+    
+    MESSAGE_BLOCK_2 = {
+        // Bytes 0-39: mensagem do buffer UART
+        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
+        buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
+        buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
+        buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
+        buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
+        
+         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
+         (nonce_ascii_len_2 == 4'd1) ? {nonce_ascii_2[7:0],  8'h80, 160'h00, msg_length_bits_2} :
+         (nonce_ascii_len_2 == 4'd2) ? {nonce_ascii_2[15:0], 8'h80, 152'h00, msg_length_bits_2} :
+         (nonce_ascii_len_2 == 4'd3) ? {nonce_ascii_2[23:0], 8'h80, 144'h00, msg_length_bits_2} :
+         (nonce_ascii_len_2 == 4'd4) ? {nonce_ascii_2[31:0], 8'h80, 136'h00, msg_length_bits_2} :
+         (nonce_ascii_len_2 == 4'd5) ? {nonce_ascii_2[39:0], 8'h80, 128'h00, msg_length_bits_2} :
+         (nonce_ascii_len_2 == 4'd6) ? {nonce_ascii_2[47:0], 8'h80, 120'h00, msg_length_bits_2} :
+         (nonce_ascii_len_2 == 4'd7) ? {nonce_ascii_2[55:0], 8'h80, 112'h00, msg_length_bits_2} :
+         (nonce_ascii_len_2 == 4'd8) ? {nonce_ascii_2[63:0], 8'h80, 104'h00, msg_length_bits_2} :
+         /* 4'd9 */                    {nonce_ascii_2[71:0], 8'h80, 96'h00,  msg_length_bits_2}
+    };
+    
+    MESSAGE_BLOCK_3 = {
+        // Bytes 0-39: mensagem do buffer UART
+        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
+        buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
+        buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
+        buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
+        buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
+        
+         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
+         (nonce_ascii_len_3 == 4'd1) ? {nonce_ascii_3[7:0],  8'h80, 160'h00, msg_length_bits_3} :
+         (nonce_ascii_len_3 == 4'd2) ? {nonce_ascii_3[15:0], 8'h80, 152'h00, msg_length_bits_3} :
+         (nonce_ascii_len_3 == 4'd3) ? {nonce_ascii_3[23:0], 8'h80, 144'h00, msg_length_bits_3} :
+         (nonce_ascii_len_3 == 4'd4) ? {nonce_ascii_3[31:0], 8'h80, 136'h00, msg_length_bits_3} :
+         (nonce_ascii_len_3 == 4'd5) ? {nonce_ascii_3[39:0], 8'h80, 128'h00, msg_length_bits_3} :
+         (nonce_ascii_len_3 == 4'd6) ? {nonce_ascii_3[47:0], 8'h80, 120'h00, msg_length_bits_3} :
+         (nonce_ascii_len_3 == 4'd7) ? {nonce_ascii_3[55:0], 8'h80, 112'h00, msg_length_bits_3} :
+         (nonce_ascii_len_3 == 4'd8) ? {nonce_ascii_3[63:0], 8'h80, 104'h00, msg_length_bits_3} :
+         /* 4'd9 */                    {nonce_ascii_3[71:0], 8'h80, 96'h00,  msg_length_bits_3}
+    };
+    
+    MESSAGE_BLOCK_4 = {
+        // Bytes 0-39: mensagem do buffer UART
+        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
+        buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
+        buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
+        buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
+        buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
+        
+         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
+         (nonce_ascii_len_4 == 4'd1) ? {nonce_ascii_4[7:0],  8'h80, 160'h00, msg_length_bits_4} :
+         (nonce_ascii_len_4 == 4'd2) ? {nonce_ascii_4[15:0], 8'h80, 152'h00, msg_length_bits_4} :
+         (nonce_ascii_len_4 == 4'd3) ? {nonce_ascii_4[23:0], 8'h80, 144'h00, msg_length_bits_4} :
+         (nonce_ascii_len_4 == 4'd4) ? {nonce_ascii_4[31:0], 8'h80, 136'h00, msg_length_bits_4} :
+         (nonce_ascii_len_4 == 4'd5) ? {nonce_ascii_4[39:0], 8'h80, 128'h00, msg_length_bits_4} :
+         (nonce_ascii_len_4 == 4'd6) ? {nonce_ascii_4[47:0], 8'h80, 120'h00, msg_length_bits_4} :
+         (nonce_ascii_len_4 == 4'd7) ? {nonce_ascii_4[55:0], 8'h80, 112'h00, msg_length_bits_4} :
+         (nonce_ascii_len_4 == 4'd8) ? {nonce_ascii_4[63:0], 8'h80, 104'h00, msg_length_bits_4} :
+         /* 4'd9 */                    {nonce_ascii_4[71:0], 8'h80, 96'h00,  msg_length_bits_4}
+    };
     
     // SHA1_EXPECTED: Decodifica 40 caracteres ASCII hexadecimais de buffer[40..79] em hash binário de 160 bits
     // Conversão: cada par de caracteres ASCII hex [2n, 2n+1] torna-se um byte binário
@@ -975,7 +417,7 @@ always @(*) begin
     
 end
 
-// Sinais de computação SHA-1 (QUAD-CORE)
+// Sinais de computação SHA-1 (PENTA-CORE)
 reg [27:0] clock_counter;     // Contador de temporização da máquina de estados
 
 // ========== REGISTRADORES DE RESULTADO PARA SHA1_CORE_0 ==========
@@ -993,6 +435,10 @@ reg sha1_digest_2_valid;          // flag: computação SHA-1 completa para nonc
 // ========== REGISTRADORES DE RESULTADO PARA SHA1_CORE_3 ==========
 reg [159:0] sha1_digest_3;        // Resultado do resumo SHA-1 computado para nonce_3
 reg sha1_digest_3_valid;          // flag: computação SHA-1 completa para nonce_3
+
+// ========== REGISTRADORES DE RESULTADO PARA SHA1_CORE_4 ==========
+reg [159:0] sha1_digest_4;        // Resultado do resumo SHA-1 computado para nonce_4
+reg sha1_digest_4_valid;          // flag: computação SHA-1 completa para nonce_4
 
 // ========== SINAIS PARA SHA1_CORE_0 ==========
 wire sha1_core_0_ready;           // Sinal: núcleo SHA-1 pronto (pode aceitar nova computação)
@@ -1025,6 +471,14 @@ wire sha1_core_3_digest_valid;    // flag: conclusão do núcleo SHA-1
 
 reg sha1_3_init;                  // Sinal pulsado: dispara inicialização do núcleo SHA-1
 reg sha1_3_next;                  // Sinal pulsado: dispara processamento do próximo bloco
+
+// ========== SINAIS PARA SHA1_CORE_4 ==========
+wire sha1_core_4_ready;           // Sinal: núcleo SHA-1 pronto (pode aceitar nova computação)
+wire [159:0] sha1_core_4_digest;  // Resumo de saída do núcleo SHA-1 (160 bits)
+wire sha1_core_4_digest_valid;    // flag: conclusão do núcleo SHA-1
+
+reg sha1_4_init;                  // Sinal pulsado: dispara inicialização do núcleo SHA-1
+reg sha1_4_next;                  // Sinal pulsado: dispara processamento do próximo bloco
 
 // Sinais de controle geral
 wire sha1_start;                  // Sinal de início: ativado quando buffer UART está cheio (estado BUFFER_FULL)
@@ -1069,7 +523,7 @@ assign led_uart_work = ~led_uart_work_output;  // LED: transmissão UART em prog
 assign led_uart_finish = ~led_uart_finish_output;  // LED: transmissão UART finalizada (pisca 0.5 segundo)
 
 // ========================================
-// INSTANCIAÇÃO DOS 2 CORES SHA-1
+// INSTANCIAÇÃO DOS 5 CORES SHA-1
 // ========================================
 
 // ========== SHA1_CORE_0: Processa nonce_0 (nonce par) ==========
@@ -1124,6 +578,19 @@ sha1_core sha1_inst_3(
     .digest_valid(sha1_core_3_digest_valid)  // Flag: resultado válido
 );
 
+// ========== SHA1_CORE_4: Processa nonce_4 (nonce ímpar) ==========
+// Conecta MESSAGE_BLOCK_4 com sinais de controle sha1_4_*
+sha1_core sha1_inst_4(
+    .clk(clk),
+    .reset_n(rst_n),
+    .init(sha1_4_init),         // Sinal pulsado para inicializar
+    .next(sha1_4_next),         // Sinal pulsado para processar
+    .block(MESSAGE_BLOCK_4),    // Bloco de mensagem com nonce_4
+    .ready(sha1_core_4_ready),  // Flag: core pronto
+    .digest(sha1_core_4_digest),  // Resultado SHA-1 (160 bits)
+    .digest_valid(sha1_core_4_digest_valid)  // Flag: resultado válido
+);
+
 // Recepção UART
 uart_rx #(
     .CLK_FRE(CLK_FRE),
@@ -1151,19 +618,21 @@ uart_tx #(
 );
 
 // Lógica principal da máquina de estados SHA-1
-// Implementa mineração proof-of-work com QUAD-CORE SHA-1
+// Implementa mineração proof-of-work com PENTA-CORE SHA-1
 // itera nonce_0 de 4 em 4: processando nonce_0 e nonce_1 e nonce_2 e nonce_3 em paralelo
 always @(posedge clk) begin
     // ========== RESET DOS SINAIS DE CONTROLE ==========
     // Estes sinais são pulsados (ativos por 1 ciclo apenas)
     sha1_0_init <= 1'b0;  // Pulso: ativado por um ciclo para disparar inicialização SHA-1 core 0
     sha1_0_next <= 1'b0;  // Pulso: ativado por um ciclo para disparar próximo bloco SHA-1 core 0
-    sha1_1_init <= 1'b0;  // Pulso: ativado por um ciclo para disparar inicialização SHA-1 core 1
-    sha1_1_next <= 1'b0;  // Pulso: ativado por um ciclo para disparar próximo bloco SHA-1 core 1
-    sha1_2_init <= 1'b0;  // Pulso: ativado por um ciclo para disparar inicialização SHA-1 core 2
-    sha1_2_next <= 1'b0;  // Pulso: ativado por um ciclo para disparar próximo bloco SHA-1 core 2
-    sha1_3_init <= 1'b0;  // Pulso: ativado por um ciclo para disparar inicialização SHA-1 core 3
-    sha1_3_next <= 1'b0;  // Pulso: ativado por um ciclo para disparar próximo bloco SHA-1 core 3
+    sha1_1_init <= 1'b0;  
+    sha1_1_next <= 1'b0;  
+    sha1_2_init <= 1'b0;  
+    sha1_2_next <= 1'b0;  
+    sha1_3_init <= 1'b0;  
+    sha1_3_next <= 1'b0;  
+    sha1_4_init <= 1'b0;  
+    sha1_4_next <= 1'b0;  
 
     case (state)
 STATE_RESET: begin
@@ -1185,19 +654,19 @@ STATE_RESET: begin
 end
 
 STATE_IDLE: begin
-    // ========== AGUARDAR QUAD-CORE PRONTO + BUFFER CHEIO ==========
+    // ========== AGUARDAR PENTA-CORE PRONTO + BUFFER CHEIO ==========
     // Reinicia nonce_0 quando transmissão UART completa (prepara para próxima mensagem)
     if (uart_tx_done_signal) begin
         nonce_0 <= 32'd0;
     end
     
-    // ========== INCREMENTAR NONCE_0 (ESTRATÉGIA QUAD-CORE) ==========
+    // ========== INCREMENTAR NONCE_0 (ESTRATÉGIA PENTA-CORE) ==========
     // Primeiro incremento: disparado por sha1_start e flag nonce_increment_done
     // Garante que nonce_0 incrementa exatamente uma vez por buffer de mensagem
-    // Incrementa de +4 para processar nonce_0 e nonce_1 e nonce_2 e nonce_3 em paralelo
+    // Incrementa de +5 para processar nonce_0 e nonce_1 e nonce_2 e nonce_* em paralelo
     if (sha1_start && !nonce_increment_done) begin
-        if (nonce_0 < DIFFICULTY - 4) begin  // Garante espaço para nonce_1 = nonce_0 + 1
-            nonce_0 <= nonce_0 + 32'd4;  // INCREMENTA +4 (em vez de +1)
+        if (nonce_0 < DIFFICULTY - 1) begin  // Garante espaço para nonce_1 = nonce_0 + 1
+            nonce_0 <= nonce_0 + 32'd5;  // INCREMENTA +5 (em vez de +1)
         end else begin
             nonce_0 <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
         end
@@ -1206,7 +675,11 @@ STATE_IDLE: begin
     
     // ========== TRANSIÇÃO PARA INIT_SHA1 ==========
     // Condição: AMBOS cores prontos AND buffer cheio AND nonce já incrementado
-    if ((sha1_core_0_ready && sha1_core_1_ready && sha1_core_2_ready && sha1_core_3_ready) && sha1_start && nonce_increment_done) begin
+    if ((sha1_core_0_ready && 
+         sha1_core_1_ready && 
+         sha1_core_2_ready && 
+         sha1_core_3_ready && 
+         sha1_core_4_ready) && sha1_start && nonce_increment_done) begin
         state <= STATE_INIT_SHA1;
         clock_counter <= 28'd0;
     end
@@ -1216,15 +689,14 @@ STATE_INIT_SHA1: begin
     // ========== DISPARAR AMBOS OS CORES SHA-1 ==========
     // Inicializa simultaneamente:
     // - sha1_core_0 com MESSAGE_BLOCK_0 (nonce_0)
-    // - sha1_core_1 com MESSAGE_BLOCK_1 (nonce_1 = nonce_0 + 1)
-    // - sha1_core_2 com MESSAGE_BLOCK_2 (nonce_2 = nonce_1 + 1)
-    // - sha1_core_3 com MESSAGE_BLOCK_3 (nonce_3 = nonce_2 + 1)
+    // - sha1_core_1 com MESSAGE_BLOCK_1 (nonce_1 = nonce_0 + 1 ...)
     led_sha1_work_output <= 1'b1;  // LED: indica que processamento começou
     
     sha1_0_init <= 1'b1;  // Pulso: dispara CORE 0 por um ciclo
     sha1_1_init <= 1'b1;  // Pulso: dispara CORE 1 por um ciclo (AMBOS ao mesmo tempo!)
-    sha1_2_init <= 1'b1;  // Pulso: dispara CORE 2 por um ciclo (AMBOS ao mesmo tempo!)
-    sha1_3_init <= 1'b1;  // Pulso: dispara CORE 3 por um ciclo (AMBOS ao mesmo tempo!)
+    sha1_2_init <= 1'b1;   
+    sha1_3_init <= 1'b1;   
+    sha1_4_init <= 1'b1;   
     
     state <= STATE_RUNNING;
     clock_counter <= 28'd0;
@@ -1244,23 +716,29 @@ STATE_DONE_WAIT: begin
     // ========== AGUARDAR AMBOS OS CORES COMPLETAREM ==========
     // Pesquisa sinais válidos de resumo SHA-1 (ambos resultados prontos)
     // Quando AMBOS os cores terminam, captura os resultados
-    if (sha1_core_0_digest_valid && sha1_core_1_digest_valid && sha1_core_2_digest_valid && sha1_core_3_digest_valid) begin
-        sha1_digest_0 <= sha1_core_0_digest;  // Captura resultado de nonce_0
-        sha1_digest_0_valid <= 1'b1;
-        sha1_digest_1 <= sha1_core_1_digest;  // Captura resultado de nonce_1
-        sha1_digest_1_valid <= 1'b1;
-        sha1_digest_2 <= sha1_core_2_digest;  // Captura resultado de nonce_2
-        sha1_digest_2_valid <= 1'b1;
-        sha1_digest_3 <= sha1_core_3_digest;  // Captura resultado de nonce_3
-        sha1_digest_3_valid <= 1'b1;
+    if (sha1_core_0_digest_valid && 
+        sha1_core_1_digest_valid && 
+        sha1_core_2_digest_valid && 
+        sha1_core_3_digest_valid && 
+        sha1_core_4_digest_valid) begin
+            sha1_digest_0 <= sha1_core_0_digest;  // Captura resultado de nonce_0
+            sha1_digest_0_valid <= 1'b1;
+            sha1_digest_1 <= sha1_core_1_digest;  // Captura resultado de nonce_1
+            sha1_digest_1_valid <= 1'b1;
+            sha1_digest_2 <= sha1_core_2_digest;  
+            sha1_digest_2_valid <= 1'b1;
+            sha1_digest_3 <= sha1_core_3_digest;  
+            sha1_digest_3_valid <= 1'b1;
+            sha1_digest_4 <= sha1_core_4_digest;  
+            sha1_digest_4_valid <= 1'b1;
 
-        clock_counter <= 28'd0;
-        state <= STATE_RESULT;
+            clock_counter <= 28'd0;
+            state <= STATE_RESULT;
     end
 end
 
 STATE_RESULT: begin
-    // ========== VERIFICAR QUAD-CORE: MATCH EM NONCE_0 OU NONCE_1 OU NONCE_2 OU NONCE_3 ==========
+    // ========== VERIFICAR PENTA-CORE: MATCH EM NONCE_0 OU NONCE_1 OU NONCE_2 OU NONCE_3 ==========
     // Lógica: Verifica se SHA1(msg) correspondem ao esperado
     // Ou se atingimos limite de dificuldade (nonce_0 >= DIFFICULTY-1, o que faria nonce_1, nonce_2 e nonce_3 >= DIFFICULTY)
     //        ************************************** MATCH ************************************** 
@@ -1268,22 +746,28 @@ STATE_RESULT: begin
         (sha1_digest_1 == SHA1_EXPECTED) || 
         (sha1_digest_2 == SHA1_EXPECTED) || 
         (sha1_digest_3 == SHA1_EXPECTED) || 
-        (nonce_0 >= DIFFICULTY - 4)) begin
+        (sha1_digest_4 == SHA1_EXPECTED) || 
+        (nonce_0 >= DIFFICULTY - 1)) begin
         // ========== CORRESPONDÊNCIA ENCONTRADA OU DIFICULDADE ATINGIDA ==========
         led_output <= 1'b1;  // LED: correspondência encontrada!
         led_sha1_work_output <= 1'b0;  // Desativa indicador de trabalho
         
         // ========== AGUARDAR AMBOS OS CORES PRONTOS ANTES DE RETORNAR À IDLE ==========
-        if (sha1_core_0_ready && sha1_core_1_ready && sha1_core_2_ready && sha1_core_3_ready) begin
-            state <= STATE_IDLE;
-            clock_counter <= 28'd0;
-            led_sha1_finish_output <= 1'b0;
-            sha1_digest_0_valid <= 1'b0;
-            sha1_digest_1_valid <= 1'b0;
-            sha1_digest_2_valid <= 1'b0;
-            sha1_digest_3_valid <= 1'b0;
+        if (sha1_core_0_ready && 
+            sha1_core_1_ready && 
+            sha1_core_2_ready && 
+            sha1_core_3_ready && 
+            sha1_core_4_ready) begin
+                state <= STATE_IDLE;
+                clock_counter <= 28'd0;
+                led_sha1_finish_output <= 1'b0;
+                sha1_digest_0_valid <= 1'b0;
+                sha1_digest_1_valid <= 1'b0;
+                sha1_digest_2_valid <= 1'b0;
+                sha1_digest_3_valid <= 1'b0;
+                sha1_digest_4_valid <= 1'b0;
 
-            nonce_increment_done <= 1'b0;  // Reinicia flag para próximo buffer de mensagem
+                nonce_increment_done <= 1'b0;  // Reinicia flag para próximo buffer de mensagem
         end else begin
             // Pisca LED enquanto aguarda cores ficarem prontos
             if (clock_counter >= 28'd5) begin
@@ -1297,25 +781,30 @@ STATE_RESULT: begin
         // ========== SEM CORRESPONDÊNCIA: INCREMENTA NONCE E TENTA NOVAMENTE ==========
         led_output <= 1'b0;
         
-        // Sem correspondência: incrementa nonce_0 em +4 para próxima tentativa
+        // Sem correspondência: incrementa nonce_0 em +5 para próxima tentativa
         // e recalcula SHA-1 para ambos os nonces
-        if (sha1_core_0_ready && sha1_core_1_ready && sha1_core_2_ready && sha1_core_3_ready) begin
-            // Incrementa nonce_0 em +4 (para processar próximo par de nonces)
-            if (nonce_0 < DIFFICULTY - 1) begin
-                nonce_0 <= nonce_0 + 32'd4;
-            end else begin
-                nonce_0 <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
-            end
-            
-            state <= STATE_INIT_SHA1;  // Volta ao init para próxima iteração
-            clock_counter <= 28'd0;
+        if (sha1_core_0_ready && 
+            sha1_core_1_ready && 
+            sha1_core_2_ready && 
+            sha1_core_3_ready && 
+            sha1_core_4_ready) begin
+                // Incrementa nonce_0 em +5 (para processar próximo par de nonces)
+                if (nonce_0 < DIFFICULTY - 1) begin
+                    nonce_0 <= nonce_0 + 32'd5;
+                end else begin
+                    nonce_0 <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
+                end
+                
+                state <= STATE_INIT_SHA1;  // Volta ao init para próxima iteração
+                clock_counter <= 28'd0;
 
-            sha1_digest_0_valid <= 1'b0;  // Limpa para próxima computação
-            sha1_digest_1_valid <= 1'b0;  // Limpa para próxima computação
-            sha1_digest_2_valid <= 1'b0;  // Limpa para próxima computação
-            sha1_digest_3_valid <= 1'b0;  // Limpa para próxima computação
+                sha1_digest_0_valid <= 1'b0;  // Limpa para próxima computação
+                sha1_digest_1_valid <= 1'b0;  
+                sha1_digest_2_valid <= 1'b0;  
+                sha1_digest_3_valid <= 1'b0;  
+                sha1_digest_4_valid <= 1'b0;  
 
-            led_sha1_work_output <= ~led_sha1_work_output;  // Reativa LED indicador de trabalho
+                led_sha1_work_output <= ~led_sha1_work_output;  // Reativa LED indicador de trabalho
         end
     end
 end
@@ -1410,24 +899,26 @@ UART_IDLE: begin
 
              //------------------------------------------
 UART_BUFFER_FULL: begin
-    // ========== AGUARDAR RESULTADO DE QUAD-CORE SHA-1 ==========
+    // ========== AGUARDAR RESULTADO DE PENTA-CORE SHA-1 ==========
     // Incremento de nonce_0 acontece na máquina de estados SHA-1 (STATE_IDLE e STATE_RESULT)
     
     // Quando resultado SHA-1 estão prontos, prepara transmissão do nonce correto
     // Transmite nonce_0 se SHA1(msg) == SHA1_EXPECTED
-    // Transmite nonce_1 se SHA1(msg) == SHA1_EXPECTED
-    // Transmite nonce_2 se SHA1(msg) == SHA1_EXPECTED
-    // Transmite nonce_3 se SHA1(msg) == SHA1_EXPECTED
-    // Transmite nonce_0 ou nonce_1 ou nonce_2 ou nonce_3 se atingiu dificuldade máxima (>= DIFFICULTY-1)
+    // ...
+    // Transmite nonce_0 ou nonce_1 ou nonce_2 ou nonce_* se atingiu dificuldade máxima (>= DIFFICULTY-1)
     
      if ((sha1_digest_0_valid && tx_data_ready && (sha1_digest_0 == SHA1_EXPECTED)) || 
          (sha1_digest_1_valid && tx_data_ready && (sha1_digest_1 == SHA1_EXPECTED)) ||
          (sha1_digest_2_valid && tx_data_ready && (sha1_digest_2 == SHA1_EXPECTED)) ||
          (sha1_digest_3_valid && tx_data_ready && (sha1_digest_3 == SHA1_EXPECTED)) ||
+         (sha1_digest_4_valid && tx_data_ready && (sha1_digest_4 == SHA1_EXPECTED)) ||
          (nonce_0 >= DIFFICULTY - 1)) begin
          
          // ========== SELECIONAR QUAL NONCE TRANSMITIR ==========
-         // Prioridade: nonce_3 (verifica primeiro), depois restante...
+         // Prioridade: nonce_4 (verifica primeiro), depois restante...
+         if (sha1_digest_4 == SHA1_EXPECTED) begin
+             nonce_to_transmit <= nonce_4;  // Transmite nonce_4 
+         end else 
          if (sha1_digest_3 == SHA1_EXPECTED) begin
              nonce_to_transmit <= nonce_3;  // Transmite nonce_3 
          end else 
@@ -1451,7 +942,7 @@ UART_BUFFER_FULL: begin
 end
 
 UART_TRANSMIT_NONCE: begin
-    // ========== TRANSMITIR 4 BYTES DO NONCE QUAD-CORE ==========
+    // ========== TRANSMITIR 4 BYTES DO NONCE PENTA-CORE ==========
     // Transmite nonce_to_transmit (que contém nonce_0 ou nonce_1)
     // Ordem de transmissão: MSB-primeiro (big-endian) [31:24], [23:16], [15:8], [7:0]
     
