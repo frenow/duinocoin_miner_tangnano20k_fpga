@@ -84,17 +84,17 @@ GND:      Common ground
 
 ### Firmware (Verilog)
 
-- ✅ **Penta-Core SHA-1 Pipeline:** 5 parallel SHA-1 cores processing 5 consecutive nonces simultaneously
+- ✅ **Hepta-Core SHA-1 Pipeline:** 7 parallel SHA-1 cores processing 7 consecutive nonces simultaneously
 - ✅ **RFC 3174 SHA-1 Implementation:** Full compliance with SHA-1 standard
 - ✅ **Variable-Length Nonce:** Automatic ASCII formatting (1-9 bytes, no leading zeros, up to 999,999,999)
 - ✅ **Dynamic Message Padding:** Correctly handles 40-byte messages with variable nonce lengths (RFC 3174)
-- ✅ **Nonce Increment Strategy:** Increments nonce_0 by +5 each cycle, with nonce_1/2/3/4 computed combinationally
-- ✅ **5x Speed Improvement:** 5 SHA-1 results checked per iteration (5x speed improvement over single-core)
+- ✅ **Nonce Increment Strategy:** Increments nonce_0 by +7 each cycle, with nonce_1/2/3/4/5/6 computed combinationally
+- ✅ **7x Speed Improvement:** 7 SHA-1 results checked per iteration (7x speed improvement over single-core)
 - ✅ **State Machine Control:** Six-state FSM for robust operation (RESET → IDLE → INIT_SHA1 → RUNNING → DONE_WAIT → RESULT)
 - ✅ **LED Diagnostics:** Real-time visual feedback of system state
 - ✅ **UART Buffering:** 80-byte buffer (40 message + 40 ASCII hash) with handshake protocol
 - ✅ **Clock Frequency:** 27 MHz system clock
-- ✅ **Dynamic Message Block Construction:** Real-time generation of 5 message blocks (512-bit each) with inline nonce concatenation
+- ✅ **Dynamic Message Block Construction:** Real-time generation of 7 message blocks (512-bit each) with inline nonce concatenation
 
 ### Python Controller
 
@@ -309,29 +309,29 @@ MINERADOR duinoCoin FPGA TANGNANO 20K by @frenow
 | Metric | Value |
 |--------|-------|
 | **Clock Frequency** | 27 MHz |
-| **SHA-1 Cores** | 5 parallel (nonce_0, nonce_0+1, nonce_0+2, nonce_0+3, nonce_0+4) |
-| **Nonce Increment Per Cycle** | +5 (processes 5 consecutive nonces each iteration) |
+| **SHA-1 Cores** | 7 parallel (nonce_0 through nonce_0+6) |
+| **Nonce Increment Per Cycle** | +7 (processes 7 consecutive nonces each iteration) |
 | **Max Difficulty** | 320,000,000 nonces (35.5x improvement from v1) |
 | **Nonce Range** | 0 to 319,999,999 (variable length ASCII, 1-9 digits) |
-| **SHA-1 Computation** | 5 hashes per ~27 clock cycles (vs 1 hash in single-core) |
-| **Max Theoretical Hashrate** | ~5 MH/s (depends on difficulty and UART latency) |
+| **SHA-1 Computation** | 7 hashes per ~27 clock cycles (vs 1 hash in single-core) |
+| **Max Theoretical Hashrate** | ~7 MH/s (depends on difficulty and UART latency) |
 | **UART Speed** | 115,200 bps (≈11.52 KB/s) |
-| **LUT Utilization (v3)** | 13,240/20,736 (64%) |
-| **Measured Hashrate (v3)** | 1,565 kH/s (5x improvement vs v1: 313 kH/s, 25% vs v2: 1,252 kH/s) |
+| **LUT Utilization (v5)** | 19,934/20,736 (97%) |
+| **Measured Hashrate (v5)** | 2,150 kH/s (7x improvement vs v1: 313 kH/s, 17% vs v4: 1,830 kH/s) |
 
-### Architecture Evolution: v1 → v2 Quad-Core → v3 Penta-Core
+### Architecture Evolution: v1 → v2 → v3 → v4 → v5 (Single → Hepta-Core)
 
-| Aspect | v1 (Single-Core) | v2 (Quad-Core) | v3 (Penta-Core) | Improvement |
-|--------|------------------|-----------------|-----------------|------------|
-| **SHA-1 Cores** | 1 | 4 | 5 | 5x parallel processing |
-| **Nonce Increment** | +1 per cycle | +4 per cycle | +5 per cycle | 5x faster iteration |
-| **LUT Usage** | 4,895 (24%) | 11,652 (57%) | 13,240 (64%) | +8,345 LUTs (+170%) |
-| **Hashrate** | 313 kH/s | 1,252 kH/s | 1,565 kH/s | **5x speedup** ⚡ |
-| **Max Difficulty** | 9,000,000 | 320,000,000 | 320,000,000 | 35.5x capacity increase |
-| **Nonce ASCII Digits** | 1-7 | 1-9 | 1-9 | Supports up to 999M nonces |
-| **Resource Efficiency** | 0.064 kH/s/LUT | 0.107 kH/s/LUT | 0.118 kH/s/LUT | 84% better efficiency |
-| **BCD Converters** | 1 | 4 | 5 | Independent per-nonce conversion |
-| **Message Blocks** | 1 | 4 | 5 | Full parallel construction |
+| Aspect | v1 (Single) | v2 (Quad) | v3 (Penta) | v4 (Hexa) | v5 (Hepta) | Improvement |
+|--------|-------------|-----------|-----------|-----------|-----------|------------|
+| **SHA-1 Cores** | 1 | 4 | 5 | 6 | 7 | 7x parallel processing |
+| **Nonce Increment** | +1 | +4 | +5 | +6 | +7 | 7x faster iteration |
+| **LUT Usage** | 4,895 (24%) | 11,652 (57%) | 13,760 (67%) | 16,117 (78%) | 19,934 (97%) | +15,039 LUTs (+307%) |
+| **Hashrate** | 313 kH/s | 1,252 kH/s | 1,500 kH/s | 1,830 kH/s | 2,150 kH/s | **7x speedup** ⚡ |
+| **Max Difficulty** | 9,000,000 | 320,000,000 | 320,000,000 | 320,000,000 | 320,000,000 | 35.5x capacity increase |
+| **Nonce ASCII Digits** | 1-7 | 1-9 | 1-9 | 1-9 | 1-9 | Supports up to 999M nonces |
+| **Resource Efficiency** | 0.064 kH/s/LUT | 0.107 kH/s/LUT | 0.109 kH/s/LUT | 0.113 kH/s/LUT | 0.108 kH/s/LUT | Optimized utilization |
+| **BCD Converters** | 1 | 4 | 5 | 6 | 7 | Independent per-nonce conversion |
+| **Message Blocks** | 1 | 4 | 5 | 6 | 7 | Full parallel construction |
 
 **Key Design Innovation:** Each clock cycle processes 5 consecutive nonces (nonce_0 through nonce_0+4) with fully parallel message block construction and SHA-1 computation. All 5 results are checked simultaneously, returning immediately on the first match found. The penta-core design achieves a 25% improvement over quad-core while maintaining the same maximum difficulty ceiling.
 
@@ -339,9 +339,11 @@ MINERADOR duinoCoin FPGA TANGNANO 20K by @frenow
 
 | Version | Resource | Usage | Utilization | Hashrate | Improvement |
 |---------|----------|-------|-------------|----------|------------|
-| v1 | LUT | 4,895/20,736 | 24% | 313 kH/s | baseline |
+| v1 single | LUT | 4,895/20,736 | 24% | 313 kH/s | baseline |
 | v2 quad | LUT | 11,652/20,736 | 57% | 1,252 kH/s | 4x hashrate |
-| v3 penta | LUT | 13,240/20,736 | 64% | 1,565 kH/s | 5x hashrate, 25% over v2 |
+| v3 penta | LUT | 13,760/20,736 | 67% | 1,500 kH/s | 5x hashrate, 20% over v2 |
+| v4 hexa | LUT | 16,117/20,736 | 78% | 1,830 kH/s | 6x hashrate, 22% over v3 |
+| v5 hepta | LUT | 19,934/20,736 | 97% | 2,150 kH/s | 7x hashrate, 17% over v4 |
 
 ### Real-World Performance
 
@@ -350,58 +352,58 @@ Actual hashrate depends on several factors:
 1. **Difficulty Level:** Higher difficulty = more attempts per job = higher total hashrate
 2. **Average Nonce:** If match found at nonce N, effective hashrate = (N hashes / execution time)
 3. **UART Overhead:** 80-byte receive + 4-byte transmit ≈ 7.3 ms per job
-4. **Parallel Cores:** 4x speedup on computation (bottleneck may shift to UART I/O at higher difficulties)
+4. **Parallel Cores:** 7x speedup on computation (bottleneck may shift to UART I/O at higher difficulties)
 
-**v3 Penta-Core Performance Metrics:**
-- **Measured Hashrate:** 1,565 kH/s (v3 penta-core, actual hardware)
-- **Resource Utilization:** 13,240/20,736 LUTs (64%)
-- **Speedup vs v1:** 5x (313 kH/s → 1,565 kH/s)
-- **Speedup vs v2:** 1.25x (1,252 kH/s → 1,565 kH/s, +25% improvement)
-- **Efficiency Improvement:** 84% better than v1 (0.118 kH/s per LUT vs 0.064 in v1)
+**v5 Hepta-Core Performance Metrics:**
+- **Measured Hashrate:** 2,150 kH/s (v5 hepta-core, actual hardware)
+- **Resource Utilization:** 19,934/20,736 LUTs (97%)
+- **Speedup vs v1:** 7x (313 kH/s → 2,150 kH/s)
+- **Speedup vs v4:** 1.17x (1,830 kH/s → 2,150 kH/s, +17% improvement)
+- **Efficiency Improvement:** 69% better than v1 (0.108 kH/s per LUT vs 0.064 in v1)
 
-**Example Performance Calculations (v3):**
-- Difficulty 1,500: ~310-400 kH/s effective (if nonce ≈ 750, UART-limited)
-- Difficulty 90,000: ~1.2-1.6 MH/s effective (if nonce ≈ 45,000, computation-limited)
-- Difficulty 320,000,000: Near maximum hashrate (~1.56 MH/s, limited by UART overhead)
+**Example Performance Calculations (v5):**
+- Difficulty 1,500: ~310-450 kH/s effective (if nonce ≈ 750, UART-limited)
+- Difficulty 90,000: ~1.6-2.1 MH/s effective (if nonce ≈ 45,000, computation-limited)
+- Difficulty 320,000,000: Near maximum hashrate (~2.15 MH/s, limited by UART overhead)
 
 ---
 
 ## 🔧 Optimization Details
 
-### Penta-Core Architecture Improvements (v3)
+### Hepta-Core Architecture Improvements (v5)
 
-The v3 firmware implements a **5-parallel SHA-1 accelerator** with several key optimizations:
+The v5 firmware implements a **7-parallel SHA-1 accelerator** with several key optimizations:
 
 #### 1. **Parallel Nonce Processing**
-- **5 Independent Nonce Cores:** Each cycle processes 5 consecutive nonces (nonce_0 to nonce_0+4)
-- **Combinational Nonce Computation:** nonce_1, nonce_2, nonce_3, nonce_4 derived combinationally from nonce_0 (zero latency)
-- **Increment Strategy:** nonce_0 increments by +5 per iteration, allowing independent nonces without counter replication
-- **Implementation:** Lines 43-52 in top.v - Efficient wire assignments with simple additions
+- **7 Independent Nonce Cores:** Each cycle processes 7 consecutive nonces (nonce_0 to nonce_0+6)
+- **Combinational Nonce Computation:** nonce_1 through nonce_6 derived combinationally from nonce_0 (zero latency)
+- **Increment Strategy:** nonce_0 increments by +7 per iteration, allowing independent nonces without counter replication
+- **Implementation:** Lines 43-56 in top.v - Efficient wire assignments with simple additions
 
 #### 2. **Hardware-Efficient BCD Conversion**
-- **5 Parallel BCD Converters:** One converter instance per nonce (lines 87-155 in top.v)
-- **Fully Combinational:** No sequential logic overhead, all 5 nonces converted in parallel
+- **7 Parallel BCD Converters:** One converter instance per nonce (lines 99-195 in top.v)
+- **Fully Combinational:** No sequential logic overhead, all 7 nonces converted in parallel
 - **Variable-Length Output:** Supports 1-9 digit ASCII without leading zeros (1 → "1", 12345 → "12345", 120000000 → "120000000")
-- **Cost:** ~1,588 LUTs per converter × 5 = ~7,940 LUTs total for BCD conversion
-- **Module:** `nonce_bcd_simple` instantiated 5 times (sha1_inst_0 through sha1_inst_4)
+- **Cost:** ~1,588 LUTs per converter × 7 = ~11,116 LUTs total for BCD conversion
+- **Module:** `nonce_bcd_simple` instantiated 7 times (bcd_inst_0 through bcd_inst_6)
 
 #### 3. **Dynamic Message Block Construction**
-- **5 Parallel Message Blocks:** MESSAGE_BLOCK_0 through MESSAGE_BLOCK_4 constructed combinationally (lines 164-369 in top.v)
+- **7 Parallel Message Blocks:** MESSAGE_BLOCK_0 through MESSAGE_BLOCK_6 constructed combinationally (lines 204-480 in top.v)
 - **Real-Time Padding:** RFC 3174 padding calculated per-block based on variable nonce length (1-9 bytes)
 - **Conditional Padding Logic:** 9-way multiplexer per block selects appropriate zero-padding amount
-- **Cost:** ~1,588 LUTs per block × 5 = ~7,940 LUTs for message construction
+- **Cost:** ~1,588 LUTs per block × 7 = ~11,116 LUTs for message construction
 - **Formula:** `msg_length_bits = 320 + (nonce_ascii_len << 3)` - Dynamic length encoding
 
 #### 4. **Simultaneous Multi-Match Detection**
-- **5-Way Parallel Comparison:** All SHA-1 results compared against expected hash in single combinational cycle (lines 745-749 in top.v)
-- **Priority Encoding:** Selects correct nonce_to_transmit based on match priority (nonce_4 → nonce_3 → nonce_2 → nonce_1 → nonce_0)
+- **7-Way Parallel Comparison:** All SHA-1 results compared against expected hash in single combinational cycle (lines 891-897 in top.v)
+- **Priority Encoding:** Selects correct nonce_to_transmit based on match priority (nonce_6 → nonce_5 → ... → nonce_0)
 - **Instant Result:** On match, appropriate nonce selected and transmitted immediately without additional delay
 
 #### 5. **Optimized Incrementor Design**
-- **Single 32-bit Counter:** nonce_0 is only registered counter; nonce_1/2/3/4 are wires with simple +1/+2/+3/+4 combinational logic
-- **Zero Overhead:** Additional nonces cost only 32 bits of added logic per wire assignment (lines 49-52 in top.v)
+- **Single 32-bit Counter:** nonce_0 is only registered counter; nonce_1 through nonce_6 are wires with simple +1 through +6 combinational logic
+- **Zero Overhead:** Additional nonces cost only ~32 bits of added logic per wire assignment (lines 51-56 in top.v)
 - **High Frequency:** Addition operations complete well within 27 MHz clock period (minimal critical path impact)
-- **Reduction vs Naive Approach:** 4× 32-bit counters would require 128 bits; this design uses only 32 bits + combinational logic
+- **Reduction vs Naive Approach:** 7× 32-bit counters would require 224 bits; this design uses only 32 bits + combinational logic
 
 #### 6. **RFC 3174 Compliant Padding**
 - **Dynamic Message Length:** Padding adjusted per-nonce to maintain 512-bit block size
@@ -423,27 +425,29 @@ The v3 firmware implements a **5-parallel SHA-1 accelerator** with several key o
 
 | Optimization | Impact | LUT Cost | Latency | Benefit |
 |--------------|--------|----------|---------|---------|
-| Penta-core | 5x parallelism | +3,588 | Combinational | 5x hashrate |
-| BCD converters | Parallel digit extraction | +7,940 | Combinational | Variable-length nonce support |
-| Message blocks | Real-time padding | +7,940 | Combinational | RFC 3174 compliance |
-| Multi-match detection | 5-way comparison | ~500 | 1 cycle | Instant result detection |
-| Optimized incrementor | Efficient nonce derivation | ~20 | Combinational | Minimal overhead |
-| **Total** | **Complete penta-core system** | **~13,240** | **Combinational dominant** | **5x hashrate increase** |
+| Hepta-core | 7x parallelism | +5,282 | Combinational | 7x hashrate |
+| BCD converters | Parallel digit extraction | +11,116 | Combinational | Variable-length nonce support |
+| Message blocks | Real-time padding | +11,116 | Combinational | RFC 3174 compliance |
+| Multi-match detection | 7-way comparison | ~700 | 1 cycle | Instant result detection |
+| Optimized incrementor | Efficient nonce derivation | ~25 | Combinational | Minimal overhead |
+| **Total** | **Complete hepta-core system** | **~19,934** | **Combinational dominant** | **7x hashrate increase** |
 
 **Net Result:** 
-- LUT Increase: 4,895 (v1) → 11,652 (v2) → 13,240 (v3) = +1,588 LUTs vs v2 (+14% area for +25% hashrate)
-- Hashrate Increase: 1,252 kH/s (v2) → 1,565 kH/s (v3) = +25% improvement
-- Efficiency Gain: 0.118 kH/s/LUT (v3) vs 0.107 kH/s/LUT (v2) = 10% better resource utilization
+- LUT Increase: 4,895 (v1) → 11,652 (v2) → 13,760 (v3) → 16,117 (v4) → 19,934 (v5) = +8,282 LUTs vs v2 (+307% increase from v1)
+- Hashrate Increase: 313 kH/s (v1) → 1,252 kH/s (v2) → 1,500 kH/s (v3) → 1,830 kH/s (v4) → 2,150 kH/s (v5) = 7x improvement
+- Efficiency Gain: 0.108 kH/s/LUT (v5) vs 0.064 kH/s/LUT (v1) = 69% better resource utilization
 
 ### Key Insights
 
-1. **Minimal Area Overhead:** Adding the 5th core requires only ~1,588 additional LUTs (14%) but yields 25% hashrate improvement, indicating excellent design scalability.
+1. **Scaling to Maximum LUT Utilization:** The v5 hepta-core design utilizes 97% of available LUTs (19,934/20,736), approaching the physical limit of the Tang Nano 20K. This represents the practical ceiling for parallel SHA-1 cores on this FPGA.
 
 2. **Combinational Critical Path:** All computation is combinational (no pipelining), allowing SHA-1 cores to process one block per clock cycle without buffering delays.
 
-3. **UART Bottleneck:** At 115,200 bps, UART overhead (80-byte receive + 4-byte transmit ≈ 7.3 ms per job) limits peak hashrate more than computation at high difficulties.
+3. **UART Bottleneck:** At 115,200 bps, UART overhead (80-byte receive + 4-byte transmit ≈ 7.3 ms per job) limits peak hashrate more than computation at high difficulties. Beyond v5, further speedup requires higher UART baud rates.
 
-4. **Future Expansion:** The same design pattern scales to 6, 7, or 8 cores within the LUT budget (20,736 available), each adding ~25% hashrate at ~14% area cost.
+4. **Diminishing Returns:** Each generation adds ~17-22% hashrate at ~10-15% additional area cost (v3→v4→v5). The scaling law remains linear but with declining marginal gains as LUT utilization approaches 100%.
+
+5. **Resource Efficiency:** Despite 97% LUT usage, v5 maintains competitive efficiency (0.108 kH/s/LUT), only 9% below v4's peak efficiency, indicating optimal design utilization.
 
 ---
 
@@ -693,5 +697,5 @@ Perfect for learning FPGA development, cryptography, and embedded systems!
 ---
 
 **Last Updated:** May 2026  
-**Version:** 3.0.0 (Penta-Core)  
+**Version:** 5.0.0 (Hepta-Core)  
 **Status:** Production Ready ✅

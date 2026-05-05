@@ -18,7 +18,7 @@ module top(
 parameter CLK_FRE  = 27;    // Frequência do relógio em MHz
 parameter UART_FRE = 115200; // Taxa de bauds UART 115200
 
-parameter DIFFICULTY = 320000000; // Valor máximo de nonce para proof-of-work (320.000.000 iterações)
+parameter DIFFICULTY = 500000000; // Valor máximo de nonce para proof-of-work (500.000.000 iterações)
 
 // ========================================
 // ESTRATÉGIA PENTA SHA-1 CORE
@@ -28,8 +28,8 @@ parameter DIFFICULTY = 320000000; // Valor máximo de nonce para proof-of-work (
 // - sha1_core_1: processa nonce_1 (nonce_0 + 1)
 
 // - Ambos cores executam SHA-1 simultaneamente
-// - Incremento: nonce_0 += 4 a cada iteração
-// - Resultado: até 4x velocidade vs. implementação com 1 core
+// - Incremento: nonce_0 += * a cada iteração
+// - Resultado: até 5x velocidade vs. implementação com 1 core
 
 // Mensagem de entrada (dinâmica): 40 bytes recebidos via UART, armazenados em buffer[0..39]
 // Hash SHA-1 esperado: 40 caracteres ASCII hexadecimais recebidos via UART, armazenados em buffer[40..79]
@@ -39,17 +39,21 @@ reg [159:0] SHA1_EXPECTED;  // Hash SHA-1 esperado (160 bits = 20 bytes, decodif
 // Variável nonce PENTA-core: 
 // - nonce_0: valor atual (nonce par) - SEQUENCIAL
 // - nonce_1: nonce_0 + 1 (nonce ímpar) - DERIVADO COMBINACIONALMENTE
-// Nota: 32 bits suportam até 4.294.967.295, mais que suficiente para 320.000.000 dificuldade
+// Nota: 32 bits suportam até 4.294.967.295, mais que suficiente para 500.000.000 dificuldade
 reg [31:0] nonce_0;  // Nonce para sha1_core_0  (incrementado +5)
 wire [31:0] nonce_1;  // Nonce para sha1_core_1 (nonce_0 + 1) - wire combinacional
 wire [31:0] nonce_2;  
 wire [31:0] nonce_3;  
 wire [31:0] nonce_4;  
+wire [31:0] nonce_5;  
+wire [31:0] nonce_6;  
 
 assign nonce_1 = nonce_0 + 32'd1;  // Sempre 1 a mais que nonce_0
 assign nonce_2 = nonce_0 + 32'd2;  // Sempre 2 a mais que nonce_0
 assign nonce_3 = nonce_0 + 32'd3;  // Sempre 3 a mais que nonce_0
-assign nonce_4 = nonce_0 + 32'd4;  // Sempre 4 a mais que nonce_0
+assign nonce_4 = nonce_0 + 32'd4;  // ...
+assign nonce_5 = nonce_0 + 32'd5;  
+assign nonce_6 = nonce_0 + 32'd6;  
 
 // Conversão ASCII do nonce: comprimento variável (sem zeros à esquerda)
 // Máximo 9 bytes para valores até 999.999.999 (menos que 1.000.000.000)
@@ -75,6 +79,12 @@ wire [3:0] nonce_ascii_len_3;
 reg [71:0] nonce_ascii_4;  
 wire [3:0] nonce_ascii_len_4;
 
+reg [71:0] nonce_ascii_5;  
+wire [3:0] nonce_ascii_len_5;
+
+reg [71:0] nonce_ascii_6;  
+wire [3:0] nonce_ascii_len_6;
+
 // ========================================================================
 // BCD Converter: converte nonce para 9 dígitos
 // ========================================================================
@@ -83,6 +93,8 @@ wire [3:0] digit9_1, digit8_1, digit7_1, digit6_1, digit5_1, digit4_1, digit3_1,
 wire [3:0] digit9_2, digit8_2, digit7_2, digit6_2, digit5_2, digit4_2, digit3_2, digit2_2, digit1_2;
 wire [3:0] digit9_3, digit8_3, digit7_3, digit6_3, digit5_3, digit4_3, digit3_3, digit2_3, digit1_3;
 wire [3:0] digit9_4, digit8_4, digit7_4, digit6_4, digit5_4, digit4_4, digit3_4, digit2_4, digit1_4;
+wire [3:0] digit9_5, digit8_5, digit7_5, digit6_5, digit5_5, digit4_5, digit3_5, digit2_5, digit1_5;
+wire [3:0] digit9_6, digit8_6, digit7_6, digit6_6, digit5_6, digit4_6, digit3_6, digit2_6, digit1_6;
 
 nonce_bcd_simple bcd_inst_0 (
     .nonce(nonce_0),
@@ -154,6 +166,34 @@ nonce_bcd_simple bcd_inst_4 (
     .digit_count(nonce_ascii_len_4)
 );
 
+nonce_bcd_simple bcd_inst_5 (
+    .nonce(nonce_5),
+    .digit9(digit9_5),
+    .digit8(digit8_5),
+    .digit7(digit7_5),
+    .digit6(digit6_5),
+    .digit5(digit5_5),
+    .digit4(digit4_5),
+    .digit3(digit3_5),
+    .digit2(digit2_5),
+    .digit1(digit1_5),
+    .digit_count(nonce_ascii_len_5)
+);
+
+nonce_bcd_simple bcd_inst_6 (
+    .nonce(nonce_6),
+    .digit9(digit9_6),
+    .digit8(digit8_6),
+    .digit7(digit7_6),
+    .digit6(digit6_6),
+    .digit5(digit5_6),
+    .digit4(digit4_6),
+    .digit3(digit3_6),
+    .digit2(digit2_6),
+    .digit1(digit1_6),
+    .digit_count(nonce_ascii_len_6)
+);
+
 // Bloco de mensagem: bloco de entrada de 512 bits com preenchimento (padrão RFC 3174 SHA-1)
 // Estrutura dinâmica:
 //   Bytes 0-39:  Mensagem (40 bytes) do buffer UART
@@ -167,6 +207,7 @@ reg [511:0] MESSAGE_BLOCK_2;
 reg [511:0] MESSAGE_BLOCK_3;
 reg [511:0] MESSAGE_BLOCK_4;
 reg [511:0] MESSAGE_BLOCK_5;
+reg [511:0] MESSAGE_BLOCK_6;
 
 // Calcular comprimento da mensagem em bits: (40 + nonce_ascii_len) * 8
 wire [15:0] msg_length_bits_0 = 16'd320 + (nonce_ascii_len_0 << 3);  // 320 = 40*8, shift left 3 = multiply by 8
@@ -174,6 +215,8 @@ wire [15:0] msg_length_bits_1 = 16'd320 + (nonce_ascii_len_1 << 3);
 wire [15:0] msg_length_bits_2 = 16'd320 + (nonce_ascii_len_2 << 3);  
 wire [15:0] msg_length_bits_3 = 16'd320 + (nonce_ascii_len_3 << 3);  
 wire [15:0] msg_length_bits_4 = 16'd320 + (nonce_ascii_len_4 << 3);  
+wire [15:0] msg_length_bits_5 = 16'd320 + (nonce_ascii_len_5 << 3);  
+wire [15:0] msg_length_bits_6 = 16'd320 + (nonce_ascii_len_6 << 3);  
 
 // Lógica combinacional: constrói dinamicamente MESSAGE_BLOCK_*
 always @(*) begin
@@ -242,6 +285,32 @@ always @(*) begin
         4'd8: nonce_ascii_4 = {8'h30 + digit8_4, 8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
         4'd9: nonce_ascii_4 = {8'h30 + digit9_4, 8'h30 + digit8_4, 8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
         default: nonce_ascii_4 = 72'd0;
+    endcase
+    
+    case (nonce_ascii_len_5)
+        4'd1: nonce_ascii_5 = {48'd0, 8'h30 + digit1_5};
+        4'd2: nonce_ascii_5 = {40'd0, 8'h30 + digit2_5, 8'h30 + digit1_5};
+        4'd3: nonce_ascii_5 = {32'd0, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+        4'd4: nonce_ascii_5 = {24'd0, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+        4'd5: nonce_ascii_5 = {16'd0, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+        4'd6: nonce_ascii_5 = {8'd0, 8'h30  + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+        4'd7: nonce_ascii_5 = {8'h30        + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+        4'd8: nonce_ascii_5 = {8'h30 + digit8_5, 8'h30 + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+        4'd9: nonce_ascii_5 = {8'h30 + digit9_5, 8'h30 + digit8_5, 8'h30 + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+        default: nonce_ascii_5 = 72'd0;
+    endcase
+    
+    case (nonce_ascii_len_6)
+        4'd1: nonce_ascii_6 = {48'd0, 8'h30 + digit1_6};
+        4'd2: nonce_ascii_6 = {40'd0, 8'h30 + digit2_6, 8'h30 + digit1_6};
+        4'd3: nonce_ascii_6 = {32'd0, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+        4'd4: nonce_ascii_6 = {24'd0, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+        4'd5: nonce_ascii_6 = {16'd0, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+        4'd6: nonce_ascii_6 = {8'd0, 8'h30  + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+        4'd7: nonce_ascii_6 = {8'h30        + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+        4'd8: nonce_ascii_6 = {8'h30 + digit8_6, 8'h30 + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+        4'd9: nonce_ascii_6 = {8'h30 + digit9_6, 8'h30 + digit8_6, 8'h30 + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+        default: nonce_ascii_6 = 72'd0;
     endcase
     
     // ========================================================================
@@ -368,6 +437,48 @@ always @(*) begin
          /* 4'd9 */                    {nonce_ascii_4[71:0], 8'h80, 96'h00,  msg_length_bits_4}
     };
     
+    MESSAGE_BLOCK_5 = {
+        // Bytes 0-39: mensagem do buffer UART
+        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
+        buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
+        buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
+        buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
+        buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
+        
+         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
+         (nonce_ascii_len_5 == 4'd1) ? {nonce_ascii_5[7:0],  8'h80, 160'h00, msg_length_bits_5} :
+         (nonce_ascii_len_5 == 4'd2) ? {nonce_ascii_5[15:0], 8'h80, 152'h00, msg_length_bits_5} :
+         (nonce_ascii_len_5 == 4'd3) ? {nonce_ascii_5[23:0], 8'h80, 144'h00, msg_length_bits_5} :
+         (nonce_ascii_len_5 == 4'd4) ? {nonce_ascii_5[31:0], 8'h80, 136'h00, msg_length_bits_5} :
+         (nonce_ascii_len_5 == 4'd5) ? {nonce_ascii_5[39:0], 8'h80, 128'h00, msg_length_bits_5} :
+         (nonce_ascii_len_5 == 4'd6) ? {nonce_ascii_5[47:0], 8'h80, 120'h00, msg_length_bits_5} :
+         (nonce_ascii_len_5 == 4'd7) ? {nonce_ascii_5[55:0], 8'h80, 112'h00, msg_length_bits_5} :
+         (nonce_ascii_len_5 == 4'd8) ? {nonce_ascii_5[63:0], 8'h80, 104'h00, msg_length_bits_5} :
+         /* 4'd9 */                    {nonce_ascii_5[71:0], 8'h80, 96'h00,  msg_length_bits_5}
+    };
+    
+    MESSAGE_BLOCK_6 = {
+        // Bytes 0-39: mensagem do buffer UART
+        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
+        buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
+        buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
+        buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
+        buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
+        
+         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
+         (nonce_ascii_len_6 == 4'd1) ? {nonce_ascii_6[7:0],  8'h80, 160'h00, msg_length_bits_6} :
+         (nonce_ascii_len_6 == 4'd2) ? {nonce_ascii_6[15:0], 8'h80, 152'h00, msg_length_bits_6} :
+         (nonce_ascii_len_6 == 4'd3) ? {nonce_ascii_6[23:0], 8'h80, 144'h00, msg_length_bits_6} :
+         (nonce_ascii_len_6 == 4'd4) ? {nonce_ascii_6[31:0], 8'h80, 136'h00, msg_length_bits_6} :
+         (nonce_ascii_len_6 == 4'd5) ? {nonce_ascii_6[39:0], 8'h80, 128'h00, msg_length_bits_6} :
+         (nonce_ascii_len_6 == 4'd6) ? {nonce_ascii_6[47:0], 8'h80, 120'h00, msg_length_bits_6} :
+         (nonce_ascii_len_6 == 4'd7) ? {nonce_ascii_6[55:0], 8'h80, 112'h00, msg_length_bits_6} :
+         (nonce_ascii_len_6 == 4'd8) ? {nonce_ascii_6[63:0], 8'h80, 104'h00, msg_length_bits_6} :
+         /* 4'd9 */                    {nonce_ascii_6[71:0], 8'h80, 96'h00,  msg_length_bits_6}
+    };
+    
     // SHA1_EXPECTED: Decodifica 40 caracteres ASCII hexadecimais de buffer[40..79] em hash binário de 160 bits
     // Conversão: cada par de caracteres ASCII hex [2n, 2n+1] torna-se um byte binário
     // Exemplo: ASCII '48' -> 0x48, 'a3' -> 0xa3, etc. (suporta maiúsculas e minúsculas)
@@ -427,24 +538,21 @@ reg sha1_digest_0_valid;          // flag: computação SHA-1 completa para nonc
 // ========== REGISTRADORES DE RESULTADO PARA SHA1_CORE_1 ==========
 reg [159:0] sha1_digest_1;        // Resultado do resumo SHA-1 computado para nonce_1
 reg sha1_digest_1_valid;          // flag: computação SHA-1 completa para nonce_1
-
-// ========== REGISTRADORES DE RESULTADO PARA SHA1_CORE_2 ==========
-reg [159:0] sha1_digest_2;        // Resultado do resumo SHA-1 computado para nonce_2
-reg sha1_digest_2_valid;          // flag: computação SHA-1 completa para nonce_2
-
-// ========== REGISTRADORES DE RESULTADO PARA SHA1_CORE_3 ==========
-reg [159:0] sha1_digest_3;        // Resultado do resumo SHA-1 computado para nonce_3
-reg sha1_digest_3_valid;          // flag: computação SHA-1 completa para nonce_3
-
-// ========== REGISTRADORES DE RESULTADO PARA SHA1_CORE_4 ==========
-reg [159:0] sha1_digest_4;        // Resultado do resumo SHA-1 computado para nonce_4
-reg sha1_digest_4_valid;          // flag: computação SHA-1 completa para nonce_4
+reg [159:0] sha1_digest_2;        // ...
+reg sha1_digest_2_valid;          
+reg [159:0] sha1_digest_3;        
+reg sha1_digest_3_valid;          
+reg [159:0] sha1_digest_4;        
+reg sha1_digest_4_valid;          
+reg [159:0] sha1_digest_5;        
+reg sha1_digest_5_valid;          
+reg [159:0] sha1_digest_6;        
+reg sha1_digest_6_valid;          
 
 // ========== SINAIS PARA SHA1_CORE_0 ==========
 wire sha1_core_0_ready;           // Sinal: núcleo SHA-1 pronto (pode aceitar nova computação)
 wire [159:0] sha1_core_0_digest;  // Resumo de saída do núcleo SHA-1 (160 bits)
 wire sha1_core_0_digest_valid;    // flag: conclusão do núcleo SHA-1
-
 reg sha1_0_init;                  // Sinal pulsado: dispara inicialização do núcleo SHA-1
 reg sha1_0_next;                  // Sinal pulsado: dispara processamento do próximo bloco
 
@@ -452,7 +560,6 @@ reg sha1_0_next;                  // Sinal pulsado: dispara processamento do pr�
 wire sha1_core_1_ready;           // Sinal: núcleo SHA-1 pronto (pode aceitar nova computação)
 wire [159:0] sha1_core_1_digest;  // Resumo de saída do núcleo SHA-1 (160 bits)
 wire sha1_core_1_digest_valid;    // flag: conclusão do núcleo SHA-1
-
 reg sha1_1_init;                  // Sinal pulsado: dispara inicialização do núcleo SHA-1
 reg sha1_1_next;                  // Sinal pulsado: dispara processamento do próximo bloco
 
@@ -460,25 +567,32 @@ reg sha1_1_next;                  // Sinal pulsado: dispara processamento do pr�
 wire sha1_core_2_ready;           // Sinal: núcleo SHA-1 pronto (pode aceitar nova computação)
 wire [159:0] sha1_core_2_digest;  // Resumo de saída do núcleo SHA-1 (160 bits)
 wire sha1_core_2_digest_valid;    // flag: conclusão do núcleo SHA-1
-
 reg sha1_2_init;                  // Sinal pulsado: dispara inicialização do núcleo SHA-1
 reg sha1_2_next;                  // Sinal pulsado: dispara processamento do próximo bloco
 
-// ========== SINAIS PARA SHA1_CORE_3 ==========
-wire sha1_core_3_ready;           // Sinal: núcleo SHA-1 pronto (pode aceitar nova computação)
-wire [159:0] sha1_core_3_digest;  // Resumo de saída do núcleo SHA-1 (160 bits)
-wire sha1_core_3_digest_valid;    // flag: conclusão do núcleo SHA-1
+wire sha1_core_3_ready;           // ...
+wire [159:0] sha1_core_3_digest;  
+wire sha1_core_3_digest_valid;    
+reg sha1_3_init;                  
+reg sha1_3_next;                  
 
-reg sha1_3_init;                  // Sinal pulsado: dispara inicialização do núcleo SHA-1
-reg sha1_3_next;                  // Sinal pulsado: dispara processamento do próximo bloco
+wire sha1_core_4_ready;           
+wire [159:0] sha1_core_4_digest;  
+wire sha1_core_4_digest_valid;    
+reg sha1_4_init;                  
+reg sha1_4_next;                  
 
-// ========== SINAIS PARA SHA1_CORE_4 ==========
-wire sha1_core_4_ready;           // Sinal: núcleo SHA-1 pronto (pode aceitar nova computação)
-wire [159:0] sha1_core_4_digest;  // Resumo de saída do núcleo SHA-1 (160 bits)
-wire sha1_core_4_digest_valid;    // flag: conclusão do núcleo SHA-1
+wire sha1_core_5_ready;           
+wire [159:0] sha1_core_5_digest;  
+wire sha1_core_5_digest_valid;    
+reg sha1_5_init;                  
+reg sha1_5_next;                  
 
-reg sha1_4_init;                  // Sinal pulsado: dispara inicialização do núcleo SHA-1
-reg sha1_4_next;                  // Sinal pulsado: dispara processamento do próximo bloco
+wire sha1_core_6_ready;           
+wire [159:0] sha1_core_6_digest;  
+wire sha1_core_6_digest_valid;    
+reg sha1_6_init;                  
+reg sha1_6_next;                  
 
 // Sinais de controle geral
 wire sha1_start;                  // Sinal de início: ativado quando buffer UART está cheio (estado BUFFER_FULL)
@@ -552,43 +666,61 @@ sha1_core sha1_inst_1(
     .digest_valid(sha1_core_1_digest_valid)  // Flag: resultado válido
 );
 
-// ========== SHA1_CORE_2: Processa nonce_2 (nonce ímpar) ==========
-// Conecta MESSAGE_BLOCK_2 com sinais de controle sha1_2_*
+
+
 sha1_core sha1_inst_2(
     .clk(clk),
     .reset_n(rst_n),
-    .init(sha1_2_init),         // Sinal pulsado para inicializar
-    .next(sha1_2_next),         // Sinal pulsado para processar
-    .block(MESSAGE_BLOCK_2),    // Bloco de mensagem com nonce_2
-    .ready(sha1_core_2_ready),  // Flag: core pronto
-    .digest(sha1_core_2_digest),  // Resultado SHA-1 (160 bits)
-    .digest_valid(sha1_core_2_digest_valid)  // Flag: resultado válido
+    .init(sha1_2_init),         
+    .next(sha1_2_next),         
+    .block(MESSAGE_BLOCK_2),    
+    .ready(sha1_core_2_ready),  
+    .digest(sha1_core_2_digest),
+    .digest_valid(sha1_core_2_digest_valid)  
 );
 
-// ========== SHA1_CORE_3: Processa nonce_3 (nonce ímpar) ==========
-// Conecta MESSAGE_BLOCK_3 com sinais de controle sha1_3_*
 sha1_core sha1_inst_3(
     .clk(clk),
     .reset_n(rst_n),
-    .init(sha1_3_init),         // Sinal pulsado para inicializar
-    .next(sha1_3_next),         // Sinal pulsado para processar
-    .block(MESSAGE_BLOCK_3),    // Bloco de mensagem com nonce_3
-    .ready(sha1_core_3_ready),  // Flag: core pronto
-    .digest(sha1_core_3_digest),  // Resultado SHA-1 (160 bits)
-    .digest_valid(sha1_core_3_digest_valid)  // Flag: resultado válido
+    .init(sha1_3_init),         
+    .next(sha1_3_next),         
+    .block(MESSAGE_BLOCK_3),    
+    .ready(sha1_core_3_ready),  
+    .digest(sha1_core_3_digest),
+    .digest_valid(sha1_core_3_digest_valid) 
 );
 
-// ========== SHA1_CORE_4: Processa nonce_4 (nonce ímpar) ==========
-// Conecta MESSAGE_BLOCK_4 com sinais de controle sha1_4_*
 sha1_core sha1_inst_4(
     .clk(clk),
     .reset_n(rst_n),
-    .init(sha1_4_init),         // Sinal pulsado para inicializar
-    .next(sha1_4_next),         // Sinal pulsado para processar
-    .block(MESSAGE_BLOCK_4),    // Bloco de mensagem com nonce_4
-    .ready(sha1_core_4_ready),  // Flag: core pronto
-    .digest(sha1_core_4_digest),  // Resultado SHA-1 (160 bits)
-    .digest_valid(sha1_core_4_digest_valid)  // Flag: resultado válido
+    .init(sha1_4_init),        
+    .next(sha1_4_next),        
+    .block(MESSAGE_BLOCK_4),   
+    .ready(sha1_core_4_ready), 
+    .digest(sha1_core_4_digest), 
+    .digest_valid(sha1_core_4_digest_valid) 
+);
+
+sha1_core sha1_inst_5(
+    .clk(clk),
+    .reset_n(rst_n),
+    .init(sha1_5_init),       
+    .next(sha1_5_next),       
+    .block(MESSAGE_BLOCK_5),  
+    .ready(sha1_core_5_ready), 
+    .digest(sha1_core_5_digest),  
+    .digest_valid(sha1_core_5_digest_valid)  
+);
+
+sha1_core sha1_inst_6(
+    .clk(clk),
+    .reset_n(rst_n),
+    .init(sha1_6_init),       
+    .next(sha1_6_next),       
+    .block(MESSAGE_BLOCK_6),  
+    .ready(sha1_core_6_ready), 
+    .digest(sha1_core_6_digest),  
+    .digest_valid(sha1_core_6_digest_valid)  
 );
 
 // Recepção UART
@@ -625,7 +757,7 @@ always @(posedge clk) begin
     // Estes sinais são pulsados (ativos por 1 ciclo apenas)
     sha1_0_init <= 1'b0;  // Pulso: ativado por um ciclo para disparar inicialização SHA-1 core 0
     sha1_0_next <= 1'b0;  // Pulso: ativado por um ciclo para disparar próximo bloco SHA-1 core 0
-    sha1_1_init <= 1'b0;  
+    sha1_1_init <= 1'b0;  // ...
     sha1_1_next <= 1'b0;  
     sha1_2_init <= 1'b0;  
     sha1_2_next <= 1'b0;  
@@ -633,6 +765,10 @@ always @(posedge clk) begin
     sha1_3_next <= 1'b0;  
     sha1_4_init <= 1'b0;  
     sha1_4_next <= 1'b0;  
+    sha1_5_init <= 1'b0;  
+    sha1_5_next <= 1'b0;  
+    sha1_6_init <= 1'b0;  
+    sha1_6_next <= 1'b0;  
 
     case (state)
 STATE_RESET: begin
@@ -654,19 +790,19 @@ STATE_RESET: begin
 end
 
 STATE_IDLE: begin
-    // ========== AGUARDAR PENTA-CORE PRONTO + BUFFER CHEIO ==========
+    // ========== AGUARDAR HEPTA-CORE PRONTO + BUFFER CHEIO ==========
     // Reinicia nonce_0 quando transmissão UART completa (prepara para próxima mensagem)
     if (uart_tx_done_signal) begin
         nonce_0 <= 32'd0;
     end
     
-    // ========== INCREMENTAR NONCE_0 (ESTRATÉGIA PENTA-CORE) ==========
+    // ========== INCREMENTAR NONCE_0 (ESTRATÉGIA HEPTA-CORE) ==========
     // Primeiro incremento: disparado por sha1_start e flag nonce_increment_done
     // Garante que nonce_0 incrementa exatamente uma vez por buffer de mensagem
-    // Incrementa de +5 para processar nonce_0 e nonce_1 e nonce_2 e nonce_* em paralelo
+    // Incrementa de +7 para processar nonce_0 e nonce_1 e nonce_2 e nonce_* em paralelo
     if (sha1_start && !nonce_increment_done) begin
         if (nonce_0 < DIFFICULTY - 1) begin  // Garante espaço para nonce_1 = nonce_0 + 1
-            nonce_0 <= nonce_0 + 32'd5;  // INCREMENTA +5 (em vez de +1)
+            nonce_0 <= nonce_0 + 32'd7;  // INCREMENTA +7 (em vez de +1)
         end else begin
             nonce_0 <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
         end
@@ -679,7 +815,9 @@ STATE_IDLE: begin
          sha1_core_1_ready && 
          sha1_core_2_ready && 
          sha1_core_3_ready && 
-         sha1_core_4_ready) && sha1_start && nonce_increment_done) begin
+         sha1_core_4_ready && 
+         sha1_core_5_ready && 
+         sha1_core_6_ready) && sha1_start && nonce_increment_done) begin
         state <= STATE_INIT_SHA1;
         clock_counter <= 28'd0;
     end
@@ -697,6 +835,8 @@ STATE_INIT_SHA1: begin
     sha1_2_init <= 1'b1;   
     sha1_3_init <= 1'b1;   
     sha1_4_init <= 1'b1;   
+    sha1_5_init <= 1'b1;   
+    sha1_6_init <= 1'b1;   
     
     state <= STATE_RUNNING;
     clock_counter <= 28'd0;
@@ -720,7 +860,9 @@ STATE_DONE_WAIT: begin
         sha1_core_1_digest_valid && 
         sha1_core_2_digest_valid && 
         sha1_core_3_digest_valid && 
-        sha1_core_4_digest_valid) begin
+        sha1_core_4_digest_valid && 
+        sha1_core_5_digest_valid && 
+        sha1_core_6_digest_valid) begin
             sha1_digest_0 <= sha1_core_0_digest;  // Captura resultado de nonce_0
             sha1_digest_0_valid <= 1'b1;
             sha1_digest_1 <= sha1_core_1_digest;  // Captura resultado de nonce_1
@@ -731,6 +873,10 @@ STATE_DONE_WAIT: begin
             sha1_digest_3_valid <= 1'b1;
             sha1_digest_4 <= sha1_core_4_digest;  
             sha1_digest_4_valid <= 1'b1;
+            sha1_digest_5 <= sha1_core_5_digest;  
+            sha1_digest_5_valid <= 1'b1;
+            sha1_digest_6 <= sha1_core_6_digest;  
+            sha1_digest_6_valid <= 1'b1;
 
             clock_counter <= 28'd0;
             state <= STATE_RESULT;
@@ -738,26 +884,30 @@ STATE_DONE_WAIT: begin
 end
 
 STATE_RESULT: begin
-    // ========== VERIFICAR PENTA-CORE: MATCH EM NONCE_0 OU NONCE_1 OU NONCE_2 OU NONCE_3 ==========
+    // ========== VERIFICAR PENTA-CORE: MATCH EM NONCE_0 OU NONCE_1 OU NONCE_2 OU NONCE_* ==========
     // Lógica: Verifica se SHA1(msg) correspondem ao esperado
-    // Ou se atingimos limite de dificuldade (nonce_0 >= DIFFICULTY-1, o que faria nonce_1, nonce_2 e nonce_3 >= DIFFICULTY)
+    // Ou se atingimos limite de dificuldade (nonce_0 >= DIFFICULTY-1, o que faria nonce_1, nonce_2 e nonce_* >= DIFFICULTY)
     //        ************************************** MATCH ************************************** 
     if ((sha1_digest_0 == SHA1_EXPECTED) || 
         (sha1_digest_1 == SHA1_EXPECTED) || 
         (sha1_digest_2 == SHA1_EXPECTED) || 
         (sha1_digest_3 == SHA1_EXPECTED) || 
         (sha1_digest_4 == SHA1_EXPECTED) || 
+        (sha1_digest_5 == SHA1_EXPECTED) || 
+        (sha1_digest_6 == SHA1_EXPECTED) || 
         (nonce_0 >= DIFFICULTY - 1)) begin
-        // ========== CORRESPONDÊNCIA ENCONTRADA OU DIFICULDADE ATINGIDA ==========
-        led_output <= 1'b1;  // LED: correspondência encontrada!
-        led_sha1_work_output <= 1'b0;  // Desativa indicador de trabalho
+            // ========== CORRESPONDÊNCIA ENCONTRADA OU DIFICULDADE ATINGIDA ==========
+            led_output <= 1'b1;  // LED: correspondência encontrada!
+            led_sha1_work_output <= 1'b0;  // Desativa indicador de trabalho
         
         // ========== AGUARDAR AMBOS OS CORES PRONTOS ANTES DE RETORNAR À IDLE ==========
         if (sha1_core_0_ready && 
             sha1_core_1_ready && 
             sha1_core_2_ready && 
             sha1_core_3_ready && 
-            sha1_core_4_ready) begin
+            sha1_core_4_ready && 
+            sha1_core_5_ready && 
+            sha1_core_6_ready) begin
                 state <= STATE_IDLE;
                 clock_counter <= 28'd0;
                 led_sha1_finish_output <= 1'b0;
@@ -766,6 +916,8 @@ STATE_RESULT: begin
                 sha1_digest_2_valid <= 1'b0;
                 sha1_digest_3_valid <= 1'b0;
                 sha1_digest_4_valid <= 1'b0;
+                sha1_digest_5_valid <= 1'b0;
+                sha1_digest_6_valid <= 1'b0;
 
                 nonce_increment_done <= 1'b0;  // Reinicia flag para próximo buffer de mensagem
         end else begin
@@ -781,16 +933,18 @@ STATE_RESULT: begin
         // ========== SEM CORRESPONDÊNCIA: INCREMENTA NONCE E TENTA NOVAMENTE ==========
         led_output <= 1'b0;
         
-        // Sem correspondência: incrementa nonce_0 em +5 para próxima tentativa
+        // Sem correspondência: incrementa nonce_0 em +7 para próxima tentativa
         // e recalcula SHA-1 para ambos os nonces
         if (sha1_core_0_ready && 
             sha1_core_1_ready && 
             sha1_core_2_ready && 
             sha1_core_3_ready && 
-            sha1_core_4_ready) begin
-                // Incrementa nonce_0 em +5 (para processar próximo par de nonces)
+            sha1_core_4_ready && 
+            sha1_core_5_ready && 
+            sha1_core_6_ready) begin
+                // Incrementa nonce_0 em +7 (para processar próximo par de nonces)
                 if (nonce_0 < DIFFICULTY - 1) begin
-                    nonce_0 <= nonce_0 + 32'd5;
+                    nonce_0 <= nonce_0 + 32'd7;
                 end else begin
                     nonce_0 <= 32'd0;  // Reinicia para 0 após atingir dificuldade máxima
                 end
@@ -803,6 +957,8 @@ STATE_RESULT: begin
                 sha1_digest_2_valid <= 1'b0;  
                 sha1_digest_3_valid <= 1'b0;  
                 sha1_digest_4_valid <= 1'b0;  
+                sha1_digest_5_valid <= 1'b0;  
+                sha1_digest_6_valid <= 1'b0;  
 
                 led_sha1_work_output <= ~led_sha1_work_output;  // Reativa LED indicador de trabalho
         end
@@ -912,10 +1068,18 @@ UART_BUFFER_FULL: begin
          (sha1_digest_2_valid && tx_data_ready && (sha1_digest_2 == SHA1_EXPECTED)) ||
          (sha1_digest_3_valid && tx_data_ready && (sha1_digest_3 == SHA1_EXPECTED)) ||
          (sha1_digest_4_valid && tx_data_ready && (sha1_digest_4 == SHA1_EXPECTED)) ||
+         (sha1_digest_5_valid && tx_data_ready && (sha1_digest_5 == SHA1_EXPECTED)) ||
+         (sha1_digest_6_valid && tx_data_ready && (sha1_digest_6 == SHA1_EXPECTED)) ||
          (nonce_0 >= DIFFICULTY - 1)) begin
          
          // ========== SELECIONAR QUAL NONCE TRANSMITIR ==========
-         // Prioridade: nonce_4 (verifica primeiro), depois restante...
+         // Prioridade: nonce_6 (verifica primeiro), depois restante...
+         if (sha1_digest_6 == SHA1_EXPECTED) begin
+             nonce_to_transmit <= nonce_6;  // Transmite nonce_6 
+         end else 
+         if (sha1_digest_5 == SHA1_EXPECTED) begin
+             nonce_to_transmit <= nonce_5;  // Transmite nonce_5 
+         end else 
          if (sha1_digest_4 == SHA1_EXPECTED) begin
              nonce_to_transmit <= nonce_4;  // Transmite nonce_4 
          end else 

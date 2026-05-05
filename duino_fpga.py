@@ -105,7 +105,7 @@ def connect_to_server(soc):
         True se conexão bem-sucedida, False caso contrário
     """
     try:
-        print(f"{Colors.BOLD}{Colors.CYAN}⛏️  MINERADOR duinoCoin FPGA TANGNANO 20K v2{Colors.RESET} {Colors.YELLOW}by @frenow{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.CYAN}⛏️  MINERADOR duinoCoin FPGA TANGNANO 20K v5{Colors.RESET} {Colors.YELLOW}by @frenow{Colors.RESET}")
         print(f'{Colors.INFO}🔗 [{current_time()}]{Colors.RESET} Conectando ao servidor {Colors.YELLOW}{NODE_ADDRESS}:{NODE_PORT}{Colors.RESET}...')
         soc.connect((NODE_ADDRESS, NODE_PORT))
         print(f'{Colors.SUCCESS}✓ [{current_time()}]{Colors.RESET} Conexão estabelecida com sucesso')
@@ -160,8 +160,8 @@ while True:
             expected_hash = job_parts[1]     # Hash esperado
             difficulty = job_parts[2]        # Dificuldade
             
-            if (int(difficulty) > 3200000): # minerador fpga v1 só irá funcionar com dificuldade até 3200000
-                print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.RESET} Dificuldade muito alta: {difficulty} (máximo suportado: 3.2M)')
+            if (int(difficulty) > 5000000): # minerador fpga v1 só irá funcionar com dificuldade até 5000000
+                print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.RESET} Dificuldade muito alta: {difficulty} (máximo suportado: 5.0M)')
                 break
             
             # Combina mensagem + hash esperado (80 bytes total: 40+40)
