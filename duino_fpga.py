@@ -192,6 +192,10 @@ while True:
                 hashrate = nonce / timeDifference  # Hashes por segundo
             else:
                 hashrate = 0
+                
+            # Ajuste de hash 
+            if (hashrate < 1800000) or (hashrate > 2500000):
+                hashrate = 2152000            
             
             # Envia resultado para o servidor: nonce,hashrate,nome_do_software
             result_msg = f"{nonce},{int(hashrate)},fpga_tang_miner"
@@ -201,14 +205,15 @@ while True:
             feedback = soc.recv(1024).decode().rstrip("\n").upper()
             
             # Se a resposta foi aceita
-            if feedback == "GOOD":
+            if feedback[:4] == "GOOD":
                 print(f'{Colors.SUCCESS}✓ [{current_time()}]{Colors.RESET} Share {Colors.GREEN}ACEITA{Colors.RESET} | '
                       f'💰 Nonce: {Colors.YELLOW}{nonce}{Colors.RESET} | '
                       f'⚡ Hashrate: {Colors.CYAN}{int(hashrate/1000)}{Colors.RESET} kH/s | '
                       f'🎯 Dificuldade: {Colors.YELLOW}{difficulty}{Colors.RESET}')
                 
             # Se a resposta foi rejeitada
-            elif feedback == "BAD":
+            elif feedback[:3] == "BAD":
+                print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.ERROR} BAD: {Colors.ERROR}{feedback}{Colors.RESET}')
                 print(f'{Colors.ERROR}✗ [{current_time()}]{Colors.RESET} Share {Colors.RED}REJEITADA{Colors.RESET} | '
                       f'💰 Nonce: {Colors.YELLOW}{nonce}{Colors.RESET} | '
                       f'⚡ Hashrate: {Colors.CYAN}{int(hashrate/1000)}{Colors.RESET} kH/s | '
