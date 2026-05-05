@@ -219,7 +219,6 @@ while True:
                       f'💰 Nonce: {Colors.YELLOW}{nonce}{Colors.RESET} | '
                       f'⚡ Hashrate: {Colors.CYAN}{int(hashrate/1000)}{Colors.RESET} kH/s | '
                       f'🎯 Dificuldade: {Colors.YELLOW}{difficulty}{Colors.RESET}')
-                break
     
     # ===== TRATAMENTO DE ERROS =====
     except KeyboardInterrupt:
