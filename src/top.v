@@ -1009,7 +1009,7 @@ reg [4:0] tx_index;             // Índice de transmissão: 0 a 3 para 4 bytes d
 reg nonce_increment_done;       // flag: garante que nonce incrementa exatamente uma vez por buffer
 
 // Registrador para armazenar qual nonce transmitir (nonce_0 ou nonce_1 ou nonce_2 ou nonce_3)
-reg [31:0] nonce_to_transmit;  // Armazena nonce a ser transmitido (nonce_0 ou nonce_1 ou nonce_2 ou nonce_3)
+reg [31:0] nonce_to_transmit = 32'd0;  // Inicializado para 0 - Armazena nonce a ser transmitido
 
 // Detector de borda de subida: detecta chegada de novo byte UART
 reg rx_valid_reg1;
@@ -1065,46 +1065,52 @@ UART_BUFFER_FULL: begin
     // ...
     // Transmite nonce_0 até nonce_6 se atingiu dificuldade máxima (>= DIFFICULTY-1)
     
-     if ((sha1_digest_0_valid && tx_data_ready && (sha1_digest_0 == SHA1_EXPECTED)) ||
-         (sha1_digest_1_valid && tx_data_ready && (sha1_digest_1 == SHA1_EXPECTED)) ||
-         (sha1_digest_2_valid && tx_data_ready && (sha1_digest_2 == SHA1_EXPECTED)) ||
-         (sha1_digest_3_valid && tx_data_ready && (sha1_digest_3 == SHA1_EXPECTED)) ||
-         (sha1_digest_4_valid && tx_data_ready && (sha1_digest_4 == SHA1_EXPECTED)) ||
-         (sha1_digest_5_valid && tx_data_ready && (sha1_digest_5 == SHA1_EXPECTED)) ||
-         (sha1_digest_6_valid && tx_data_ready && (sha1_digest_6 == SHA1_EXPECTED)) ||
-         (nonce_0 >= DIFFICULTY - 1)) begin
+      if ((sha1_digest_0_valid && tx_data_ready && (sha1_digest_0 == SHA1_EXPECTED)) ||
+          (sha1_digest_1_valid && tx_data_ready && (sha1_digest_1 == SHA1_EXPECTED)) ||
+          (sha1_digest_2_valid && tx_data_ready && (sha1_digest_2 == SHA1_EXPECTED)) ||
+          (sha1_digest_3_valid && tx_data_ready && (sha1_digest_3 == SHA1_EXPECTED)) ||
+          (sha1_digest_4_valid && tx_data_ready && (sha1_digest_4 == SHA1_EXPECTED)) ||
+          (sha1_digest_5_valid && tx_data_ready && (sha1_digest_5 == SHA1_EXPECTED)) ||
+          (sha1_digest_6_valid && tx_data_ready && (sha1_digest_6 == SHA1_EXPECTED)) ||
+          (nonce_0 >= DIFFICULTY - 1)) begin
+          
+          // ========== SELECIONAR QUAL NONCE TRANSMITIR ==========
+          // Prioridade: nonce_6 (verifica primeiro), depois restante...
+          // Seleciona o nonce E IMEDIATAMENTE armazena em nonce_to_transmit
+          if (sha1_digest_6 == SHA1_EXPECTED) begin
+              nonce_to_transmit <= nonce_6;  // Transmite nonce_6 
+              tx_data <= nonce_6[31:24];     // Byte 0 MSB - Lê diretamente do nonce
+          end else 
+          if (sha1_digest_5 == SHA1_EXPECTED) begin
+              nonce_to_transmit <= nonce_5;  // Transmite nonce_5 
+              tx_data <= nonce_5[31:24];     // Byte 0 MSB - Lê diretamente do nonce
+          end else 
+          if (sha1_digest_4 == SHA1_EXPECTED) begin
+              nonce_to_transmit <= nonce_4;  // Transmite nonce_4 
+              tx_data <= nonce_4[31:24];     // Byte 0 MSB - Lê diretamente do nonce
+          end else 
+          if (sha1_digest_3 == SHA1_EXPECTED) begin
+              nonce_to_transmit <= nonce_3;  // Transmite nonce_3 
+              tx_data <= nonce_3[31:24];     // Byte 0 MSB - Lê diretamente do nonce
+          end else 
+          if (sha1_digest_2 == SHA1_EXPECTED) begin
+              nonce_to_transmit <= nonce_2;  // Transmite nonce_2 
+              tx_data <= nonce_2[31:24];     // Byte 0 MSB - Lê diretamente do nonce
+          end else 
+          if (sha1_digest_1 == SHA1_EXPECTED) begin
+              nonce_to_transmit <= nonce_1;  // Transmite nonce_1 
+              tx_data <= nonce_1[31:24];     // Byte 0 MSB - Lê diretamente do nonce
+          end else begin
+              nonce_to_transmit <= nonce_0;  // Transmite nonce_0 por padrão
+              tx_data <= nonce_0[31:24];     // Byte 0 MSB - Lê diretamente do nonce
+          end
          
-         // ========== SELECIONAR QUAL NONCE TRANSMITIR ==========
-         // Prioridade: nonce_6 (verifica primeiro), depois restante...
-         if (sha1_digest_6 == SHA1_EXPECTED) begin
-             nonce_to_transmit <= nonce_6;  // Transmite nonce_6 
-         end else 
-         if (sha1_digest_5 == SHA1_EXPECTED) begin
-             nonce_to_transmit <= nonce_5;  // Transmite nonce_5 
-         end else 
-         if (sha1_digest_4 == SHA1_EXPECTED) begin
-             nonce_to_transmit <= nonce_4;  // Transmite nonce_4 
-         end else 
-         if (sha1_digest_3 == SHA1_EXPECTED) begin
-             nonce_to_transmit <= nonce_3;  // Transmite nonce_3 
-         end else 
-         if (sha1_digest_2 == SHA1_EXPECTED) begin
-             nonce_to_transmit <= nonce_2;  // Transmite nonce_2 
-         end else 
-         if (sha1_digest_1 == SHA1_EXPECTED) begin
-             nonce_to_transmit <= nonce_1;  // Transmite nonce_1 
-         end else begin
-             nonce_to_transmit <= nonce_0;  // Transmite nonce_0 por padrão
-         end
-        
-        // Começa transmissão do resultado de nonce de 4 bytes
-        // Byte 0 (MSB): nonce_to_transmit[31:24]
-        tx_data <= nonce_to_transmit[31:24];  // Byte 0 - Transmite MSB primeiro (big-endian)
-        tx_data_valid <= 1'b1;
-        led_uart_work_output <= 1'b1;         // LED: transmissão iniciada
-        tx_index <= 5'd0;                     // Começa no índice 0
-        uart_state <= UART_TRANSMIT_NONCE;    // Move para estado de transmissão
-    end
+         // Começa transmissão do resultado de nonce de 4 bytes
+         tx_data_valid <= 1'b1;
+         led_uart_work_output <= 1'b1;         // LED: transmissão iniciada
+         tx_index <= 5'd0;                     // Começa no índice 0
+         uart_state <= UART_TRANSMIT_NONCE;    // Move para estado de transmissão
+     end
 end
 
 UART_TRANSMIT_NONCE: begin
