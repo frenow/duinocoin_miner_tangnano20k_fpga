@@ -5,6 +5,7 @@ from socket import socket, SOL_SOCKET, SO_REUSEADDR  # Socket com opções
 import sys  # Para argumentos do sistema
 import time  # Para temporização e timestamps
 import serial
+from datetime import datetime  # Para timestamps detalhados nos logs
 
 # ===== DEFINIÇÕES DE CORES ANSI =====
 class Colors:
@@ -79,6 +80,59 @@ def send_to_fpga(data):
 def current_time():
     """Retorna a hora atual formatada como HH:MM:SS"""
     return time.strftime("%H:%M:%S", time.localtime())
+
+def init_error_log():
+    """
+    Inicializa o arquivo de log para erros de rejeição
+    Cria um arquivo com timestamp para cada sessão
+    """
+    log_dir = "error_logs"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_dir, f"rejected_shares_{timestamp}.txt")
+    
+    # Cria header do arquivo
+    with open(log_file, 'w', encoding='utf-8') as f:
+        f.write("="*80 + "\n")
+        f.write(f"LOG DE SHARES REJEITADAS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("="*80 + "\n\n")
+    
+    return log_file
+
+def log_rejected_share(log_file, nonce, hashrate, difficulty, message_hash, expected_hash, feedback, timeDifference):
+    """
+    Registra um share rejeitado no arquivo de log
+    
+    Args:
+        log_file: Caminho do arquivo de log
+        nonce: Nonce enviado
+        hashrate: Taxa de hashes por segundo
+        difficulty: Dificuldade do job
+        message_hash: Hash da mensagem
+        expected_hash: Hash esperado
+        feedback: Resposta do servidor
+        timeDifference: Tempo gasto no cálculo
+    """
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            
+            f.write(f"TIMESTAMP: {timestamp}\n")
+            f.write(f"STATUS: {'BAD' if feedback[:3] == 'BAD' else 'UNKNOWN'}\n")
+            f.write(f"RESPOSTA_SERVIDOR: {feedback}\n")
+            f.write("-" * 80 + "\n")
+            f.write(f"NONCE: {nonce}\n")
+            f.write(f"HASHRATE: {int(hashrate)} H/s ({int(hashrate/1000)} kH/s)\n")
+            f.write(f"DIFICULDADE: {difficulty}\n")
+            f.write(f"TEMPO_CALCULO: {timeDifference:.4f}s\n")
+            f.write("-" * 80 + "\n")
+            f.write(f"MESSAGE_HASH: {message_hash}\n")
+            f.write(f"EXPECTED_HASH: {expected_hash}\n")
+            f.write("=" * 80 + "\n\n")
+    except Exception as e:
+        print(f"{Colors.ERROR}❌ Erro ao escrever no arquivo de log: {e}{Colors.RESET}")
 def create_socket():
     """
     Cria um novo socket com configurações adequadas
@@ -116,6 +170,11 @@ def connect_to_server(soc):
 # Configurações do minerador
 username = 'frenow'         #altere aqui a sua wallet
 mining_key = 'None'
+
+# Inicializa arquivo de log
+error_log_file = init_error_log()
+print(f'{Colors.INFO}📝 [{current_time()}]{Colors.RESET} Arquivo de log criado: {Colors.YELLOW}{error_log_file}{Colors.RESET}')
+
 # Loop infinito para reconectação automática em caso de falha
 attempt = 0
 while True:
@@ -160,8 +219,8 @@ while True:
             expected_hash = job_parts[1]     # Hash esperado
             difficulty = job_parts[2]        # Dificuldade
             
-            if (int(difficulty) > 5000000): # minerador fpga v1 só irá funcionar com dificuldade até 5000000
-                print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.RESET} Dificuldade muito alta: {difficulty} (máximo suportado: 5.0M)')
+            if (int(difficulty) > 1000000): # minerador fpga v1 só irá funcionar com dificuldade até 1000000
+                print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.RESET} Dificuldade muito alta: {difficulty} (máximo suportado: 1.0M)')
                 break
             
             # Combina mensagem + hash esperado (80 bytes total: 40+40)
@@ -193,10 +252,6 @@ while True:
             else:
                 hashrate = 0
                 
-            # Ajuste de hash 
-            if (hashrate < 1800000) or (hashrate > 2500000):
-                hashrate = 2152000            
-            
             # Envia resultado para o servidor: nonce,hashrate,nome_do_software
             result_msg = f"{nonce},{int(hashrate)},fpga_tang_miner"
             soc.send(bytes(result_msg, encoding="utf8"))
@@ -218,12 +273,17 @@ while True:
                       f'💰 Nonce: {Colors.YELLOW}{nonce}{Colors.RESET} | '
                       f'⚡ Hashrate: {Colors.CYAN}{int(hashrate/1000)}{Colors.RESET} kH/s | '
                       f'🎯 Dificuldade: {Colors.YELLOW}{difficulty}{Colors.RESET}')
+                # Log do erro
+                log_rejected_share(error_log_file, nonce, hashrate, difficulty, message_hash, expected_hash, feedback, timeDifference)
+                
             else:
                 print(f'{Colors.WARNING}⚠️  [{current_time()}]{Colors.ERROR} Resposta desconhecida: {Colors.ERROR}{feedback}{Colors.RESET}')
                 print(f'{Colors.ERROR}✗ [{current_time()}]{Colors.RESET} Share {Colors.RED}REJEITADA{Colors.RESET} | '
                       f'💰 Nonce: {Colors.YELLOW}{nonce}{Colors.RESET} | '
                       f'⚡ Hashrate: {Colors.CYAN}{int(hashrate/1000)}{Colors.RESET} kH/s | '
                       f'🎯 Dificuldade: {Colors.YELLOW}{difficulty}{Colors.RESET}')
+                # Log do erro
+                log_rejected_share(error_log_file, nonce, hashrate, difficulty, message_hash, expected_hash, feedback, timeDifference)
     
     # ===== TRATAMENTO DE ERROS =====
     except KeyboardInterrupt:

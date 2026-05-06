@@ -18,7 +18,7 @@ module top(
 parameter CLK_FRE  = 27;    // Frequência do relógio em MHz
 parameter UART_FRE = 115200; // Taxa de bauds UART 115200
 
-parameter DIFFICULTY = 500000000; // Valor máximo de nonce para proof-of-work (500.000.000 iterações)
+parameter DIFFICULTY = 100000000; // Valor máximo de nonce para proof-of-work (100.000.000 iterações)
 
 // ========================================
 // ESTRATÉGIA HEPTA SHA-1 CORE
@@ -222,96 +222,96 @@ wire [15:0] msg_length_bits_6 = 16'd320 + (nonce_ascii_len_6 << 3);
 always @(*) begin
     // Construir nonce_ascii baseado na contagem de dígitos
     // Converter BCD puro (0-9) para ASCII (0x30-0x39)
-    case (nonce_ascii_len_0)
-        4'd1: nonce_ascii_0 = {48'd0, 8'h30 + digit1_0};
-        4'd2: nonce_ascii_0 = {40'd0, 8'h30 + digit2_0, 8'h30 + digit1_0};
-        4'd3: nonce_ascii_0 = {32'd0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
-        4'd4: nonce_ascii_0 = {24'd0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
-        4'd5: nonce_ascii_0 = {16'd0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
-        4'd6: nonce_ascii_0 = {8'd0, 8'h30  + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
-        4'd7: nonce_ascii_0 = {8'h30        + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
-        4'd8: nonce_ascii_0 = {8'h30 + digit8_0, 8'h30 + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
-        4'd9: nonce_ascii_0 = {8'h30 + digit9_0, 8'h30 + digit8_0, 8'h30 + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
-        default: nonce_ascii_0 = 72'd0;
-    endcase
+     case (nonce_ascii_len_0)
+         4'd1: nonce_ascii_0 = {64'd0, 8'h30 + digit1_0};
+         4'd2: nonce_ascii_0 = {56'd0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+         4'd3: nonce_ascii_0 = {48'd0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+         4'd4: nonce_ascii_0 = {40'd0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+         4'd5: nonce_ascii_0 = {32'd0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+         4'd6: nonce_ascii_0 = {24'd0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+         4'd7: nonce_ascii_0 = {16'd0, 8'h30 + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+         4'd8: nonce_ascii_0 = {8'd0, 8'h30 + digit8_0, 8'h30 + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+         4'd9: nonce_ascii_0 = {8'h30 + digit9_0, 8'h30 + digit8_0, 8'h30 + digit7_0, 8'h30 + digit6_0, 8'h30 + digit5_0, 8'h30 + digit4_0, 8'h30 + digit3_0, 8'h30 + digit2_0, 8'h30 + digit1_0};
+         default: nonce_ascii_0 = 72'd0;
+     endcase
     
-    case (nonce_ascii_len_1)
-        4'd1: nonce_ascii_1 = {48'd0, 8'h30 + digit1_1};
-        4'd2: nonce_ascii_1 = {40'd0, 8'h30 + digit2_1, 8'h30 + digit1_1};
-        4'd3: nonce_ascii_1 = {32'd0, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
-        4'd4: nonce_ascii_1 = {24'd0, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
-        4'd5: nonce_ascii_1 = {16'd0, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
-        4'd6: nonce_ascii_1 = {8'd0, 8'h30  + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
-        4'd7: nonce_ascii_1 = {8'h30        + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
-        4'd8: nonce_ascii_1 = {8'h30 + digit8_1, 8'h30 + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
-        4'd9: nonce_ascii_1 = {8'h30 + digit9_1, 8'h30 + digit8_1, 8'h30 + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
-        default: nonce_ascii_1 = 72'd0;
-    endcase
+     case (nonce_ascii_len_1)
+         4'd1: nonce_ascii_1 = {64'd0, 8'h30 + digit1_1};
+         4'd2: nonce_ascii_1 = {56'd0, 8'h30 + digit2_1, 8'h30 + digit1_1};
+         4'd3: nonce_ascii_1 = {48'd0, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+         4'd4: nonce_ascii_1 = {40'd0, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+         4'd5: nonce_ascii_1 = {32'd0, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+         4'd6: nonce_ascii_1 = {24'd0, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+         4'd7: nonce_ascii_1 = {16'd0, 8'h30 + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+         4'd8: nonce_ascii_1 = {8'd0, 8'h30 + digit8_1, 8'h30 + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+         4'd9: nonce_ascii_1 = {8'h30 + digit9_1, 8'h30 + digit8_1, 8'h30 + digit7_1, 8'h30 + digit6_1, 8'h30 + digit5_1, 8'h30 + digit4_1, 8'h30 + digit3_1, 8'h30 + digit2_1, 8'h30 + digit1_1};
+         default: nonce_ascii_1 = 72'd0;
+     endcase
     
-    case (nonce_ascii_len_2)
-        4'd1: nonce_ascii_2 = {48'd0, 8'h30 + digit1_2};
-        4'd2: nonce_ascii_2 = {40'd0, 8'h30 + digit2_2, 8'h30 + digit1_2};
-        4'd3: nonce_ascii_2 = {32'd0, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
-        4'd4: nonce_ascii_2 = {24'd0, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
-        4'd5: nonce_ascii_2 = {16'd0, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
-        4'd6: nonce_ascii_2 = {8'd0, 8'h30  + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
-        4'd7: nonce_ascii_2 = {8'h30        + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
-        4'd8: nonce_ascii_2 = {8'h30 + digit8_2, 8'h30 + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
-        4'd9: nonce_ascii_2 = {8'h30 + digit9_2, 8'h30 + digit8_2, 8'h30 + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
-        default: nonce_ascii_2 = 72'd0;
-    endcase
+     case (nonce_ascii_len_2)
+         4'd1: nonce_ascii_2 = {64'd0, 8'h30 + digit1_2};
+         4'd2: nonce_ascii_2 = {56'd0, 8'h30 + digit2_2, 8'h30 + digit1_2};
+         4'd3: nonce_ascii_2 = {48'd0, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+         4'd4: nonce_ascii_2 = {40'd0, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+         4'd5: nonce_ascii_2 = {32'd0, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+         4'd6: nonce_ascii_2 = {24'd0, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+         4'd7: nonce_ascii_2 = {16'd0, 8'h30 + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+         4'd8: nonce_ascii_2 = {8'd0, 8'h30 + digit8_2, 8'h30 + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+         4'd9: nonce_ascii_2 = {8'h30 + digit9_2, 8'h30 + digit8_2, 8'h30 + digit7_2, 8'h30 + digit6_2, 8'h30 + digit5_2, 8'h30 + digit4_2, 8'h30 + digit3_2, 8'h30 + digit2_2, 8'h30 + digit1_2};
+         default: nonce_ascii_2 = 72'd0;
+     endcase
     
-    case (nonce_ascii_len_3)
-        4'd1: nonce_ascii_3 = {48'd0, 8'h30 + digit1_3};
-        4'd2: nonce_ascii_3 = {40'd0, 8'h30 + digit2_3, 8'h30 + digit1_3};
-        4'd3: nonce_ascii_3 = {32'd0, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
-        4'd4: nonce_ascii_3 = {24'd0, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
-        4'd5: nonce_ascii_3 = {16'd0, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
-        4'd6: nonce_ascii_3 = {8'd0, 8'h30  + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
-        4'd7: nonce_ascii_3 = {8'h30        + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
-        4'd8: nonce_ascii_3 = {8'h30 + digit8_3, 8'h30 + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
-        4'd9: nonce_ascii_3 = {8'h30 + digit9_3, 8'h30 + digit8_3, 8'h30 + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
-        default: nonce_ascii_3 = 72'd0;
-    endcase
+     case (nonce_ascii_len_3)
+         4'd1: nonce_ascii_3 = {48'd0, 8'h30 + digit1_3};
+         4'd2: nonce_ascii_3 = {40'd0, 8'h30 + digit2_3, 8'h30 + digit1_3};
+         4'd3: nonce_ascii_3 = {32'd0, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+         4'd4: nonce_ascii_3 = {24'd0, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+         4'd5: nonce_ascii_3 = {16'd0, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+         4'd6: nonce_ascii_3 = {8'd0, 8'h30  + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+         4'd7: nonce_ascii_3 = {8'h30 + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+          4'd8: nonce_ascii_3 = {8'd0, 8'h30 + digit8_3, 8'h30 + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+         4'd9: nonce_ascii_3 = {8'h30 + digit9_3, 8'h30 + digit8_3, 8'h30 + digit7_3, 8'h30 + digit6_3, 8'h30 + digit5_3, 8'h30 + digit4_3, 8'h30 + digit3_3, 8'h30 + digit2_3, 8'h30 + digit1_3};
+         default: nonce_ascii_3 = 72'd0;
+     endcase
 
-    case (nonce_ascii_len_4)
-        4'd1: nonce_ascii_4 = {48'd0, 8'h30 + digit1_4};
-        4'd2: nonce_ascii_4 = {40'd0, 8'h30 + digit2_4, 8'h30 + digit1_4};
-        4'd3: nonce_ascii_4 = {32'd0, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
-        4'd4: nonce_ascii_4 = {24'd0, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
-        4'd5: nonce_ascii_4 = {16'd0, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
-        4'd6: nonce_ascii_4 = {8'd0, 8'h30  + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
-        4'd7: nonce_ascii_4 = {8'h30        + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
-        4'd8: nonce_ascii_4 = {8'h30 + digit8_4, 8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
-        4'd9: nonce_ascii_4 = {8'h30 + digit9_4, 8'h30 + digit8_4, 8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
-        default: nonce_ascii_4 = 72'd0;
-    endcase
+     case (nonce_ascii_len_4)
+         4'd1: nonce_ascii_4 = {48'd0, 8'h30 + digit1_4};
+         4'd2: nonce_ascii_4 = {40'd0, 8'h30 + digit2_4, 8'h30 + digit1_4};
+         4'd3: nonce_ascii_4 = {32'd0, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+         4'd4: nonce_ascii_4 = {24'd0, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+         4'd5: nonce_ascii_4 = {16'd0, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+         4'd6: nonce_ascii_4 = {8'd0, 8'h30  + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+         4'd7: nonce_ascii_4 = {8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+          4'd8: nonce_ascii_4 = {8'd0, 8'h30 + digit8_4, 8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+         4'd9: nonce_ascii_4 = {8'h30 + digit9_4, 8'h30 + digit8_4, 8'h30 + digit7_4, 8'h30 + digit6_4, 8'h30 + digit5_4, 8'h30 + digit4_4, 8'h30 + digit3_4, 8'h30 + digit2_4, 8'h30 + digit1_4};
+         default: nonce_ascii_4 = 72'd0;
+     endcase
     
-    case (nonce_ascii_len_5)
-        4'd1: nonce_ascii_5 = {48'd0, 8'h30 + digit1_5};
-        4'd2: nonce_ascii_5 = {40'd0, 8'h30 + digit2_5, 8'h30 + digit1_5};
-        4'd3: nonce_ascii_5 = {32'd0, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
-        4'd4: nonce_ascii_5 = {24'd0, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
-        4'd5: nonce_ascii_5 = {16'd0, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
-        4'd6: nonce_ascii_5 = {8'd0, 8'h30  + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
-        4'd7: nonce_ascii_5 = {8'h30        + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
-        4'd8: nonce_ascii_5 = {8'h30 + digit8_5, 8'h30 + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
-        4'd9: nonce_ascii_5 = {8'h30 + digit9_5, 8'h30 + digit8_5, 8'h30 + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
-        default: nonce_ascii_5 = 72'd0;
-    endcase
+     case (nonce_ascii_len_5)
+         4'd1: nonce_ascii_5 = {48'd0, 8'h30 + digit1_5};
+         4'd2: nonce_ascii_5 = {40'd0, 8'h30 + digit2_5, 8'h30 + digit1_5};
+         4'd3: nonce_ascii_5 = {32'd0, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+         4'd4: nonce_ascii_5 = {24'd0, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+         4'd5: nonce_ascii_5 = {16'd0, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+         4'd6: nonce_ascii_5 = {8'd0, 8'h30  + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+         4'd7: nonce_ascii_5 = {8'h30 + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+          4'd8: nonce_ascii_5 = {8'd0, 8'h30 + digit8_5, 8'h30 + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+         4'd9: nonce_ascii_5 = {8'h30 + digit9_5, 8'h30 + digit8_5, 8'h30 + digit7_5, 8'h30 + digit6_5, 8'h30 + digit5_5, 8'h30 + digit4_5, 8'h30 + digit3_5, 8'h30 + digit2_5, 8'h30 + digit1_5};
+         default: nonce_ascii_5 = 72'd0;
+     endcase
     
-    case (nonce_ascii_len_6)
-        4'd1: nonce_ascii_6 = {48'd0, 8'h30 + digit1_6};
-        4'd2: nonce_ascii_6 = {40'd0, 8'h30 + digit2_6, 8'h30 + digit1_6};
-        4'd3: nonce_ascii_6 = {32'd0, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
-        4'd4: nonce_ascii_6 = {24'd0, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
-        4'd5: nonce_ascii_6 = {16'd0, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
-        4'd6: nonce_ascii_6 = {8'd0, 8'h30  + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
-        4'd7: nonce_ascii_6 = {8'h30        + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
-        4'd8: nonce_ascii_6 = {8'h30 + digit8_6, 8'h30 + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
-        4'd9: nonce_ascii_6 = {8'h30 + digit9_6, 8'h30 + digit8_6, 8'h30 + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
-        default: nonce_ascii_6 = 72'd0;
-    endcase
+     case (nonce_ascii_len_6)
+         4'd1: nonce_ascii_6 = {48'd0, 8'h30 + digit1_6};
+         4'd2: nonce_ascii_6 = {40'd0, 8'h30 + digit2_6, 8'h30 + digit1_6};
+         4'd3: nonce_ascii_6 = {32'd0, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+         4'd4: nonce_ascii_6 = {24'd0, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+         4'd5: nonce_ascii_6 = {16'd0, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+         4'd6: nonce_ascii_6 = {8'd0, 8'h30  + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+         4'd7: nonce_ascii_6 = {8'h30 + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+          4'd8: nonce_ascii_6 = {8'd0, 8'h30 + digit8_6, 8'h30 + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+         4'd9: nonce_ascii_6 = {8'h30 + digit9_6, 8'h30 + digit8_6, 8'h30 + digit7_6, 8'h30 + digit6_6, 8'h30 + digit5_6, 8'h30 + digit4_6, 8'h30 + digit3_6, 8'h30 + digit2_6, 8'h30 + digit1_6};
+         default: nonce_ascii_6 = 72'd0;
+     endcase
     
     // ========================================================================
     // Estrutura dinâmica: buffer[40] + nonce_ascii[variável] + 0x80 + padding + comprimento
@@ -340,17 +340,17 @@ always @(*) begin
         buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
         buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
         
-         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
-         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
-         (nonce_ascii_len_0 == 4'd1) ? {nonce_ascii_0[7:0],  8'h80, 160'h00, msg_length_bits_0} :
-         (nonce_ascii_len_0 == 4'd2) ? {nonce_ascii_0[15:0], 8'h80, 152'h00, msg_length_bits_0} :
-         (nonce_ascii_len_0 == 4'd3) ? {nonce_ascii_0[23:0], 8'h80, 144'h00, msg_length_bits_0} :
-         (nonce_ascii_len_0 == 4'd4) ? {nonce_ascii_0[31:0], 8'h80, 136'h00, msg_length_bits_0} :
-         (nonce_ascii_len_0 == 4'd5) ? {nonce_ascii_0[39:0], 8'h80, 128'h00, msg_length_bits_0} :
-         (nonce_ascii_len_0 == 4'd6) ? {nonce_ascii_0[47:0], 8'h80, 120'h00, msg_length_bits_0} :
-         (nonce_ascii_len_0 == 4'd7) ? {nonce_ascii_0[55:0], 8'h80, 112'h00, msg_length_bits_0} :
-         (nonce_ascii_len_0 == 4'd8) ? {nonce_ascii_0[63:0], 8'h80, 104'h00, msg_length_bits_0} :
-         /* 4'd9 */                    {nonce_ascii_0[71:0], 8'h80, 96'h00 , msg_length_bits_0}
+          // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+          // TOTAL = 512 bits = 64 bytes (40 buffer + 1-9 nonce + 1 pad + padding + 2 length)
+          (nonce_ascii_len_0 == 4'd1) ? {nonce_ascii_0[7:0],   8'h80, 160'h00000000000000000000000000000000000000, msg_length_bits_0} :
+          (nonce_ascii_len_0 == 4'd2) ? {nonce_ascii_0[15:0],  8'h80, 152'h0000000000000000000000000000000000000, msg_length_bits_0} :
+          (nonce_ascii_len_0 == 4'd3) ? {nonce_ascii_0[23:0],  8'h80, 144'h000000000000000000000000000000000000, msg_length_bits_0} :
+          (nonce_ascii_len_0 == 4'd4) ? {nonce_ascii_0[31:0],  8'h80, 136'h00000000000000000000000000000000000, msg_length_bits_0} :
+          (nonce_ascii_len_0 == 4'd5) ? {nonce_ascii_0[39:0],  8'h80, 128'h0000000000000000000000000000000000, msg_length_bits_0} :
+          (nonce_ascii_len_0 == 4'd6) ? {nonce_ascii_0[47:0],  8'h80, 120'h000000000000000000000000000000000, msg_length_bits_0} :
+          (nonce_ascii_len_0 == 4'd7) ? {nonce_ascii_0[55:0],  8'h80, 112'h00000000000000000000000000000000, msg_length_bits_0} :
+          (nonce_ascii_len_0 == 4'd8) ? {nonce_ascii_0[63:0],  8'h80, 104'h0000000000000000000000000000, msg_length_bits_0} :
+          /* 4'd9 */                    {nonce_ascii_0[71:0],  8'h80, 96'h000000000000000000000000, msg_length_bits_0}
     };
     
     MESSAGE_BLOCK_1 = {
@@ -361,17 +361,17 @@ always @(*) begin
         buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
         buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
         
-         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
-         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
-         (nonce_ascii_len_1 == 4'd1) ? {nonce_ascii_1[7:0],  8'h80, 160'h00, msg_length_bits_1} :
-         (nonce_ascii_len_1 == 4'd2) ? {nonce_ascii_1[15:0], 8'h80, 152'h00, msg_length_bits_1} :
-         (nonce_ascii_len_1 == 4'd3) ? {nonce_ascii_1[23:0], 8'h80, 144'h00, msg_length_bits_1} :
-         (nonce_ascii_len_1 == 4'd4) ? {nonce_ascii_1[31:0], 8'h80, 136'h00, msg_length_bits_1} :
-         (nonce_ascii_len_1 == 4'd5) ? {nonce_ascii_1[39:0], 8'h80, 128'h00, msg_length_bits_1} :
-         (nonce_ascii_len_1 == 4'd6) ? {nonce_ascii_1[47:0], 8'h80, 120'h00, msg_length_bits_1} :
-         (nonce_ascii_len_1 == 4'd7) ? {nonce_ascii_1[55:0], 8'h80, 112'h00, msg_length_bits_1} :
-         (nonce_ascii_len_1 == 4'd8) ? {nonce_ascii_1[63:0], 8'h80, 104'h00, msg_length_bits_1} :
-         /* 4'd9 */                    {nonce_ascii_1[71:0], 8'h80, 96'h00,  msg_length_bits_1}
+          // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+          // TOTAL = 512 bits = 64 bytes (40 buffer + 1-9 nonce + 1 pad + padding + 2 length)
+          (nonce_ascii_len_1 == 4'd1) ? {nonce_ascii_1[7:0],   8'h80, 160'h0000000000000000000, msg_length_bits_1} :
+          (nonce_ascii_len_1 == 4'd2) ? {nonce_ascii_1[15:0],  8'h80, 152'h000000000000000000, msg_length_bits_1} :
+          (nonce_ascii_len_1 == 4'd3) ? {nonce_ascii_1[23:0],  8'h80, 144'h00000000000000000, msg_length_bits_1} :
+          (nonce_ascii_len_1 == 4'd4) ? {nonce_ascii_1[31:0],  8'h80, 136'h0000000000000000, msg_length_bits_1} :
+          (nonce_ascii_len_1 == 4'd5) ? {nonce_ascii_1[39:0],  8'h80, 128'h000000000000000, msg_length_bits_1} :
+          (nonce_ascii_len_1 == 4'd6) ? {nonce_ascii_1[47:0],  8'h80, 120'h00000000000000, msg_length_bits_1} :
+          (nonce_ascii_len_1 == 4'd7) ? {nonce_ascii_1[55:0],  8'h80, 112'h0000000000000, msg_length_bits_1} :
+          (nonce_ascii_len_1 == 4'd8) ? {nonce_ascii_1[63:0],  8'h80, 104'h000000000000, msg_length_bits_1} :
+          /* 4'd9 */                    {nonce_ascii_1[71:0],  8'h80, 96'h00000000000, msg_length_bits_1}
     };
     
     MESSAGE_BLOCK_2 = {
@@ -382,17 +382,17 @@ always @(*) begin
         buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
         buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
         
-         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
-         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
-         (nonce_ascii_len_2 == 4'd1) ? {nonce_ascii_2[7:0],  8'h80, 160'h00, msg_length_bits_2} :
-         (nonce_ascii_len_2 == 4'd2) ? {nonce_ascii_2[15:0], 8'h80, 152'h00, msg_length_bits_2} :
-         (nonce_ascii_len_2 == 4'd3) ? {nonce_ascii_2[23:0], 8'h80, 144'h00, msg_length_bits_2} :
-         (nonce_ascii_len_2 == 4'd4) ? {nonce_ascii_2[31:0], 8'h80, 136'h00, msg_length_bits_2} :
-         (nonce_ascii_len_2 == 4'd5) ? {nonce_ascii_2[39:0], 8'h80, 128'h00, msg_length_bits_2} :
-         (nonce_ascii_len_2 == 4'd6) ? {nonce_ascii_2[47:0], 8'h80, 120'h00, msg_length_bits_2} :
-         (nonce_ascii_len_2 == 4'd7) ? {nonce_ascii_2[55:0], 8'h80, 112'h00, msg_length_bits_2} :
-         (nonce_ascii_len_2 == 4'd8) ? {nonce_ascii_2[63:0], 8'h80, 104'h00, msg_length_bits_2} :
-         /* 4'd9 */                    {nonce_ascii_2[71:0], 8'h80, 96'h00,  msg_length_bits_2}
+          // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+          // TOTAL = 512 bits = 64 bytes (40 buffer + 1-9 nonce + 1 pad + padding + 2 length)
+          (nonce_ascii_len_2 == 4'd1) ? {nonce_ascii_2[7:0],   8'h80, 160'h0000000000000000000, msg_length_bits_2} :
+          (nonce_ascii_len_2 == 4'd2) ? {nonce_ascii_2[15:0],  8'h80, 152'h000000000000000000, msg_length_bits_2} :
+          (nonce_ascii_len_2 == 4'd3) ? {nonce_ascii_2[23:0],  8'h80, 144'h00000000000000000, msg_length_bits_2} :
+          (nonce_ascii_len_2 == 4'd4) ? {nonce_ascii_2[31:0],  8'h80, 136'h0000000000000000, msg_length_bits_2} :
+          (nonce_ascii_len_2 == 4'd5) ? {nonce_ascii_2[39:0],  8'h80, 128'h000000000000000, msg_length_bits_2} :
+          (nonce_ascii_len_2 == 4'd6) ? {nonce_ascii_2[47:0],  8'h80, 120'h00000000000000, msg_length_bits_2} :
+          (nonce_ascii_len_2 == 4'd7) ? {nonce_ascii_2[55:0],  8'h80, 112'h0000000000000, msg_length_bits_2} :
+          (nonce_ascii_len_2 == 4'd8) ? {nonce_ascii_2[63:0],  8'h80, 104'h000000000000, msg_length_bits_2} :
+          /* 4'd9 */                    {nonce_ascii_2[71:0],  8'h80, 96'h00000000000, msg_length_bits_2}
     };
     
     MESSAGE_BLOCK_3 = {
@@ -403,17 +403,17 @@ always @(*) begin
         buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
         buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
         
-         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
-         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
-         (nonce_ascii_len_3 == 4'd1) ? {nonce_ascii_3[7:0],  8'h80, 160'h00, msg_length_bits_3} :
-         (nonce_ascii_len_3 == 4'd2) ? {nonce_ascii_3[15:0], 8'h80, 152'h00, msg_length_bits_3} :
-         (nonce_ascii_len_3 == 4'd3) ? {nonce_ascii_3[23:0], 8'h80, 144'h00, msg_length_bits_3} :
-         (nonce_ascii_len_3 == 4'd4) ? {nonce_ascii_3[31:0], 8'h80, 136'h00, msg_length_bits_3} :
-         (nonce_ascii_len_3 == 4'd5) ? {nonce_ascii_3[39:0], 8'h80, 128'h00, msg_length_bits_3} :
-         (nonce_ascii_len_3 == 4'd6) ? {nonce_ascii_3[47:0], 8'h80, 120'h00, msg_length_bits_3} :
-         (nonce_ascii_len_3 == 4'd7) ? {nonce_ascii_3[55:0], 8'h80, 112'h00, msg_length_bits_3} :
-         (nonce_ascii_len_3 == 4'd8) ? {nonce_ascii_3[63:0], 8'h80, 104'h00, msg_length_bits_3} :
-         /* 4'd9 */                    {nonce_ascii_3[71:0], 8'h80, 96'h00,  msg_length_bits_3}
+          // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+          // TOTAL = 512 bits = 64 bytes (40 buffer + 1-9 nonce + 1 pad + padding + 2 length)
+          (nonce_ascii_len_3 == 4'd1) ? {nonce_ascii_3[7:0],   8'h80, 160'h0000000000000000000, msg_length_bits_3} :
+          (nonce_ascii_len_3 == 4'd2) ? {nonce_ascii_3[15:0],  8'h80, 152'h000000000000000000, msg_length_bits_3} :
+          (nonce_ascii_len_3 == 4'd3) ? {nonce_ascii_3[23:0],  8'h80, 144'h00000000000000000, msg_length_bits_3} :
+          (nonce_ascii_len_3 == 4'd4) ? {nonce_ascii_3[31:0],  8'h80, 136'h0000000000000000, msg_length_bits_3} :
+          (nonce_ascii_len_3 == 4'd5) ? {nonce_ascii_3[39:0],  8'h80, 128'h000000000000000, msg_length_bits_3} :
+          (nonce_ascii_len_3 == 4'd6) ? {nonce_ascii_3[47:0],  8'h80, 120'h00000000000000, msg_length_bits_3} :
+          (nonce_ascii_len_3 == 4'd7) ? {nonce_ascii_3[55:0],  8'h80, 112'h0000000000000, msg_length_bits_3} :
+          (nonce_ascii_len_3 == 4'd8) ? {nonce_ascii_3[63:0],  8'h80, 104'h000000000000, msg_length_bits_3} :
+          /* 4'd9 */                    {nonce_ascii_3[71:0],  8'h80, 96'h00000000000, msg_length_bits_3}
     };
     
     MESSAGE_BLOCK_4 = {
@@ -424,17 +424,17 @@ always @(*) begin
         buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
         buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
         
-         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
-         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
-         (nonce_ascii_len_4 == 4'd1) ? {nonce_ascii_4[7:0],  8'h80, 160'h00, msg_length_bits_4} :
-         (nonce_ascii_len_4 == 4'd2) ? {nonce_ascii_4[15:0], 8'h80, 152'h00, msg_length_bits_4} :
-         (nonce_ascii_len_4 == 4'd3) ? {nonce_ascii_4[23:0], 8'h80, 144'h00, msg_length_bits_4} :
-         (nonce_ascii_len_4 == 4'd4) ? {nonce_ascii_4[31:0], 8'h80, 136'h00, msg_length_bits_4} :
-         (nonce_ascii_len_4 == 4'd5) ? {nonce_ascii_4[39:0], 8'h80, 128'h00, msg_length_bits_4} :
-         (nonce_ascii_len_4 == 4'd6) ? {nonce_ascii_4[47:0], 8'h80, 120'h00, msg_length_bits_4} :
-         (nonce_ascii_len_4 == 4'd7) ? {nonce_ascii_4[55:0], 8'h80, 112'h00, msg_length_bits_4} :
-         (nonce_ascii_len_4 == 4'd8) ? {nonce_ascii_4[63:0], 8'h80, 104'h00, msg_length_bits_4} :
-         /* 4'd9 */                    {nonce_ascii_4[71:0], 8'h80, 96'h00,  msg_length_bits_4}
+          // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+          // TOTAL = 512 bits = 64 bytes (40 buffer + 1-9 nonce + 1 pad + padding + 2 length)
+          (nonce_ascii_len_4 == 4'd1) ? {nonce_ascii_4[7:0],   8'h80, 160'h0000000000000000000, msg_length_bits_4} :
+          (nonce_ascii_len_4 == 4'd2) ? {nonce_ascii_4[15:0],  8'h80, 152'h000000000000000000, msg_length_bits_4} :
+          (nonce_ascii_len_4 == 4'd3) ? {nonce_ascii_4[23:0],  8'h80, 144'h00000000000000000, msg_length_bits_4} :
+          (nonce_ascii_len_4 == 4'd4) ? {nonce_ascii_4[31:0],  8'h80, 136'h0000000000000000, msg_length_bits_4} :
+          (nonce_ascii_len_4 == 4'd5) ? {nonce_ascii_4[39:0],  8'h80, 128'h000000000000000, msg_length_bits_4} :
+          (nonce_ascii_len_4 == 4'd6) ? {nonce_ascii_4[47:0],  8'h80, 120'h00000000000000, msg_length_bits_4} :
+          (nonce_ascii_len_4 == 4'd7) ? {nonce_ascii_4[55:0],  8'h80, 112'h0000000000000, msg_length_bits_4} :
+          (nonce_ascii_len_4 == 4'd8) ? {nonce_ascii_4[63:0],  8'h80, 104'h000000000000, msg_length_bits_4} :
+          /* 4'd9 */                    {nonce_ascii_4[71:0],  8'h80, 96'h00000000000, msg_length_bits_4}
     };
     
     MESSAGE_BLOCK_5 = {
@@ -445,17 +445,17 @@ always @(*) begin
         buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
         buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
         
-         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
-         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
-         (nonce_ascii_len_5 == 4'd1) ? {nonce_ascii_5[7:0],  8'h80, 160'h00, msg_length_bits_5} :
-         (nonce_ascii_len_5 == 4'd2) ? {nonce_ascii_5[15:0], 8'h80, 152'h00, msg_length_bits_5} :
-         (nonce_ascii_len_5 == 4'd3) ? {nonce_ascii_5[23:0], 8'h80, 144'h00, msg_length_bits_5} :
-         (nonce_ascii_len_5 == 4'd4) ? {nonce_ascii_5[31:0], 8'h80, 136'h00, msg_length_bits_5} :
-         (nonce_ascii_len_5 == 4'd5) ? {nonce_ascii_5[39:0], 8'h80, 128'h00, msg_length_bits_5} :
-         (nonce_ascii_len_5 == 4'd6) ? {nonce_ascii_5[47:0], 8'h80, 120'h00, msg_length_bits_5} :
-         (nonce_ascii_len_5 == 4'd7) ? {nonce_ascii_5[55:0], 8'h80, 112'h00, msg_length_bits_5} :
-         (nonce_ascii_len_5 == 4'd8) ? {nonce_ascii_5[63:0], 8'h80, 104'h00, msg_length_bits_5} :
-         /* 4'd9 */                    {nonce_ascii_5[71:0], 8'h80, 96'h00,  msg_length_bits_5}
+          // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+          // TOTAL = 512 bits = 64 bytes (40 buffer + 1-9 nonce + 1 pad + padding + 2 length)
+          (nonce_ascii_len_5 == 4'd1) ? {nonce_ascii_5[7:0],   8'h80, 160'h0000000000000000000, msg_length_bits_5} :
+          (nonce_ascii_len_5 == 4'd2) ? {nonce_ascii_5[15:0],  8'h80, 152'h000000000000000000, msg_length_bits_5} :
+          (nonce_ascii_len_5 == 4'd3) ? {nonce_ascii_5[23:0],  8'h80, 144'h00000000000000000, msg_length_bits_5} :
+          (nonce_ascii_len_5 == 4'd4) ? {nonce_ascii_5[31:0],  8'h80, 136'h0000000000000000, msg_length_bits_5} :
+          (nonce_ascii_len_5 == 4'd5) ? {nonce_ascii_5[39:0],  8'h80, 128'h000000000000000, msg_length_bits_5} :
+          (nonce_ascii_len_5 == 4'd6) ? {nonce_ascii_5[47:0],  8'h80, 120'h00000000000000, msg_length_bits_5} :
+          (nonce_ascii_len_5 == 4'd7) ? {nonce_ascii_5[55:0],  8'h80, 112'h0000000000000, msg_length_bits_5} :
+          (nonce_ascii_len_5 == 4'd8) ? {nonce_ascii_5[63:0],  8'h80, 104'h000000000000, msg_length_bits_5} :
+          /* 4'd9 */                    {nonce_ascii_5[71:0],  8'h80, 96'h00000000000, msg_length_bits_5}
     };
     
     MESSAGE_BLOCK_6 = {
@@ -466,17 +466,17 @@ always @(*) begin
         buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31],
         buffer[32], buffer[33], buffer[34], buffer[35], buffer[36], buffer[37], buffer[38], buffer[39],
         
-         // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
-         // Estrutura simplificada: concatena nonce_ascii e padding conforme tamanho
-         (nonce_ascii_len_6 == 4'd1) ? {nonce_ascii_6[7:0],  8'h80, 160'h00, msg_length_bits_6} :
-         (nonce_ascii_len_6 == 4'd2) ? {nonce_ascii_6[15:0], 8'h80, 152'h00, msg_length_bits_6} :
-         (nonce_ascii_len_6 == 4'd3) ? {nonce_ascii_6[23:0], 8'h80, 144'h00, msg_length_bits_6} :
-         (nonce_ascii_len_6 == 4'd4) ? {nonce_ascii_6[31:0], 8'h80, 136'h00, msg_length_bits_6} :
-         (nonce_ascii_len_6 == 4'd5) ? {nonce_ascii_6[39:0], 8'h80, 128'h00, msg_length_bits_6} :
-         (nonce_ascii_len_6 == 4'd6) ? {nonce_ascii_6[47:0], 8'h80, 120'h00, msg_length_bits_6} :
-         (nonce_ascii_len_6 == 4'd7) ? {nonce_ascii_6[55:0], 8'h80, 112'h00, msg_length_bits_6} :
-         (nonce_ascii_len_6 == 4'd8) ? {nonce_ascii_6[63:0], 8'h80, 104'h00, msg_length_bits_6} :
-         /* 4'd9 */                    {nonce_ascii_6[71:0], 8'h80, 96'h00,  msg_length_bits_6}
+          // Nonce ASCII variável (1-9 bytes) + 0x80 (marcador padding) + zeros + comprimento
+          // TOTAL = 512 bits = 64 bytes (40 buffer + 1-9 nonce + 1 pad + padding + 2 length)
+          (nonce_ascii_len_6 == 4'd1) ? {nonce_ascii_6[7:0],   8'h80, 160'h0000000000000000000, msg_length_bits_6} :
+          (nonce_ascii_len_6 == 4'd2) ? {nonce_ascii_6[15:0],  8'h80, 152'h000000000000000000, msg_length_bits_6} :
+          (nonce_ascii_len_6 == 4'd3) ? {nonce_ascii_6[23:0],  8'h80, 144'h00000000000000000, msg_length_bits_6} :
+          (nonce_ascii_len_6 == 4'd4) ? {nonce_ascii_6[31:0],  8'h80, 136'h0000000000000000, msg_length_bits_6} :
+          (nonce_ascii_len_6 == 4'd5) ? {nonce_ascii_6[39:0],  8'h80, 128'h000000000000000, msg_length_bits_6} :
+          (nonce_ascii_len_6 == 4'd6) ? {nonce_ascii_6[47:0],  8'h80, 120'h00000000000000, msg_length_bits_6} :
+          (nonce_ascii_len_6 == 4'd7) ? {nonce_ascii_6[55:0],  8'h80, 112'h0000000000000, msg_length_bits_6} :
+          (nonce_ascii_len_6 == 4'd8) ? {nonce_ascii_6[63:0],  8'h80, 104'h000000000000, msg_length_bits_6} :
+          /* 4'd9 */                    {nonce_ascii_6[71:0],  8'h80, 96'h00000000000, msg_length_bits_6}
     };
     
     // SHA1_EXPECTED: Decodifica 40 caracteres ASCII hexadecimais de buffer[40..79] em hash binário de 160 bits
@@ -1108,33 +1108,33 @@ UART_BUFFER_FULL: begin
 end
 
 UART_TRANSMIT_NONCE: begin
-    // ========== TRANSMITIR 4 BYTES DO NONCE HEPTA-CORE ==========
-    // Transmite nonce_to_transmit (que contém nonce_0 até nonce_6)
-    // Ordem de transmissão: MSB-primeiro (big-endian) [31:24], [23:16], [15:8], [7:0]
-    
-    if (tx_data_ready) begin
-         if (tx_index < 5'd3) begin
-             // Mais bytes de nonce para transmitir: prepara próximo byte
-             // tx_index: 0→1→2→3 (4 transições para 4 bytes total)
-             tx_index <= tx_index + 1'b1;
-            
-            // Extrai próximo byte do nonce_to_transmit usando (tx_index + 1)
-            case(tx_index + 1'b1)
-                5'd1:  tx_data <= nonce_to_transmit[23:16];   // Byte 1
-                5'd2:  tx_data <= nonce_to_transmit[15:8];    // Byte 2
-                5'd3:  tx_data <= nonce_to_transmit[7:0];     // Byte 3 (LSB)
-                default: tx_data <= 8'd0;
-            endcase
-            
-            tx_data_valid <= 1'b1;
-        end else begin
-            // Todos os 4 bytes de nonce (índices 0-3) transmitidos: finaliza
-            tx_data_valid <= 1'b0;
-            led_uart_finish_output <= ~led_uart_finish_output;  // Alterna LED
-            uart_state <= UART_TX_DONE;
-        end
-    end
-end
+     // ========== TRANSMITIR 4 BYTES DO NONCE HEPTA-CORE ==========
+     // Transmite nonce_to_transmit (que contém nonce_0 até nonce_6)
+     // Ordem de transmissão: MSB-primeiro (big-endian) [31:24], [23:16], [15:8], [7:0]
+     
+     if (tx_data_ready) begin
+          if (tx_index < 5'd3) begin
+              // Mais bytes de nonce para transmitir: prepara próximo byte
+              // tx_index: 0→1→2→3 (4 transições para 4 bytes total)
+              tx_index <= tx_index + 1'b1;
+             
+             // Extrai próximo byte do nonce_to_transmit usando (tx_index + 1)
+             case(tx_index + 1'b1)
+                 5'd1:  tx_data <= nonce_to_transmit[23:16];   // Byte 1
+                 5'd2:  tx_data <= nonce_to_transmit[15:8];    // Byte 2
+                 5'd3:  tx_data <= nonce_to_transmit[7:0];     // Byte 3 (LSB)
+                 default: tx_data <= 8'd0;
+             endcase
+             
+             tx_data_valid <= 1'b1;
+         end else begin
+             // Todos os 4 bytes de nonce (índices 0-3) transmitidos: finaliza
+             tx_data_valid <= 1'b0;
+             led_uart_finish_output <= ~led_uart_finish_output;  // Alterna LED
+             uart_state <= UART_TX_DONE;
+         end
+     end
+ end
 
              //------------------------------------------
 UART_TX_DONE: begin
