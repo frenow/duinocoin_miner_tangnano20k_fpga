@@ -2,7 +2,7 @@
 
 ### Did you like the project? Leave a star ⭐ or buy me a coffee 💰. 
 #### DuinoCoin Wallet: frenow 
-#### BTC Wallet: 1HMtKjB7K2bVvuyGySgmFQT2QHfp7zpyzK
+#### BTC Wallet: bc1qdf5qhmfymltn8xu52grlnskdelz8unsznljwe5
 
 A high-performance proof-of-work cryptocurrency miner implementation for the **Sipeed Tang Nano 20K FPGA** board. This project combines Verilog firmware for SHA-1 acceleration with Python control software for seamless integration with the DuinoCoin network.
 
